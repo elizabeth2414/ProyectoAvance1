@@ -1,0 +1,565 @@
+# ========================================================================
+# CARPETA: modelos/
+# Sistema de Gestion de Ventas - Clases de dominio del sistema
+# ========================================================================
+
+
+# ========== modelos/__init__.py ==========
+"""
+Modulo modelos - Clases de dominio del sistema
+"""
+from .excepciones import (
+    SistemaVentasError,
+    ClienteNoEncontradoError,
+    ProductoNoEncontradoError,
+    ProveedorNoEncontradoError,
+    VentaNoEncontradaError,
+    UsuarioNoEncontradoError,
+    StockInsuficienteError,
+    DuplicadoError,
+    ValidacionError
+)
+from .cliente import Cliente
+from .producto import Producto
+from .proveedor import Proveedor
+from .venta import Venta
+from .usuario import Usuario
+
+
+# ========== modelos/excepciones.py ==========
+"""
+Excepciones personalizadas del Sistema de Gestion de Ventas
+"""
+
+
+class SistemaVentasError(Exception):
+    """Excepcion base del sistema de ventas"""
+
+    def __init__(self, mensaje: str = "Error en el sistema de ventas"):
+        self.mensaje = mensaje
+        super().__init__(self.mensaje)
+
+
+class ClienteNoEncontradoError(SistemaVentasError):
+    """Se lanza cuando no se encuentra un cliente"""
+
+    def __init__(self, cliente_id: str = None):
+        mensaje = f"Cliente no encontrado: {cliente_id}" if cliente_id else "Cliente no encontrado"
+        super().__init__(mensaje)
+
+
+class ProductoNoEncontradoError(SistemaVentasError):
+    """Se lanza cuando no se encuentra un producto"""
+
+    def __init__(self, producto_id: str = None):
+        mensaje = f"Producto no encontrado: {producto_id}" if producto_id else "Producto no encontrado"
+        super().__init__(mensaje)
+
+
+class ProveedorNoEncontradoError(SistemaVentasError):
+    """Se lanza cuando no se encuentra un proveedor"""
+
+    def __init__(self, proveedor_id: str = None):
+        mensaje = f"Proveedor no encontrado: {proveedor_id}" if proveedor_id else "Proveedor no encontrado"
+        super().__init__(mensaje)
+
+
+class VentaNoEncontradaError(SistemaVentasError):
+    """Se lanza cuando no se encuentra una venta"""
+
+    def __init__(self, venta_id: str = None):
+        mensaje = f"Venta no encontrada: {venta_id}" if venta_id else "Venta no encontrada"
+        super().__init__(mensaje)
+
+
+class UsuarioNoEncontradoError(SistemaVentasError):
+    """Se lanza cuando no se encuentra un usuario"""
+
+    def __init__(self, usuario_id: str = None):
+        mensaje = f"Usuario no encontrado: {usuario_id}" if usuario_id else "Usuario no encontrado"
+        super().__init__(mensaje)
+
+
+class StockInsuficienteError(SistemaVentasError):
+    """Se lanza cuando no hay suficiente stock para una venta"""
+
+    def __init__(self, producto_id: str = None, stock_actual: int = 0, cantidad_solicitada: int = 0):
+        mensaje = f"Stock insuficiente para producto {producto_id}. "
+        mensaje += f"Stock actual: {stock_actual}, Cantidad solicitada: {cantidad_solicitada}"
+        super().__init__(mensaje)
+        self.producto_id = producto_id
+        self.stock_actual = stock_actual
+        self.cantidad_solicitada = cantidad_solicitada
+
+
+class DuplicadoError(SistemaVentasError):
+    """Se lanza cuando se intenta crear un registro duplicado"""
+
+    def __init__(self, entidad: str = "Registro", identificador: str = None):
+        mensaje = f"{entidad} duplicado"
+        if identificador:
+            mensaje += f": {identificador}"
+        super().__init__(mensaje)
+
+
+class ValidacionError(SistemaVentasError):
+    """Se lanza cuando hay errores de validacion de datos"""
+
+    def __init__(self, campo: str = None, mensaje: str = "Error de validacion"):
+        if campo:
+            mensaje = f"Error de validacion en {campo}: {mensaje}"
+        super().__init__(mensaje)
+        self.campo = campo
+
+
+class CredencialesInvalidasError(SistemaVentasError):
+    """Se lanza cuando las credenciales de login son incorrectas"""
+
+    def __init__(self):
+        super().__init__("Usuario o contrasena incorrectos")
+
+
+class PermisoInsuficienteError(SistemaVentasError):
+    """Se lanza cuando el usuario no tiene permisos para una accion"""
+
+    def __init__(self, accion: str = None):
+        mensaje = "Permisos insuficientes"
+        if accion:
+            mensaje += f" para: {accion}"
+        super().__init__(mensaje)
+
+
+# ========== modelos/cliente.py ==========
+"""
+Modelo Cliente - Representa un cliente del sistema de ventas
+"""
+from typing import List, Optional
+
+
+class Cliente:
+    """Clase que representa un cliente"""
+
+    def __init__(
+        self,
+        id: str,
+        nombre: str,
+        correo: Optional[str] = None,
+        telefono: Optional[str] = None,
+        direccion: Optional[str] = None,
+        historial_compras: Optional[List] = None
+    ):
+        self.id = id
+        self.nombre = nombre
+        self.correo = correo
+        self.telefono = telefono
+        self.direccion = direccion
+        self.historial_compras = historial_compras if historial_compras else []
+
+    def __str__(self) -> str:
+        return f"Cliente({self.id}, {self.nombre})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def to_dict(self) -> dict:
+        """Convierte el cliente a diccionario"""
+        return {
+            'id': self.id,
+            'nombre': self.nombre,
+            'correo': self.correo,
+            'telefono': self.telefono,
+            'direccion': self.direccion
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Cliente':
+        """Crea un cliente desde un diccionario"""
+        return cls(
+            id=data.get('id'),
+            nombre=data.get('nombre'),
+            correo=data.get('correo'),
+            telefono=data.get('telefono'),
+            direccion=data.get('direccion'),
+            historial_compras=data.get('historial_compras', [])
+        )
+
+    @classmethod
+    def from_row(cls, row) -> 'Cliente':
+        """Crea un cliente desde una fila de SQLite"""
+        return cls(
+            id=row['id'],
+            nombre=row['nombre'],
+            correo=row['correo'],
+            telefono=row['telefono'],
+            direccion=row['direccion']
+        )
+
+    def agregar_compra(self, venta_id: str):
+        """Agrega una venta al historial de compras"""
+        if venta_id not in self.historial_compras:
+            self.historial_compras.append(venta_id)
+
+    def total_compras(self) -> int:
+        """Retorna el numero total de compras del cliente"""
+        return len(self.historial_compras)
+
+
+# ========== modelos/producto.py ==========
+"""
+Modelo Producto - Representa un producto del inventario
+"""
+from typing import Optional
+
+
+class Producto:
+    """Clase que representa un producto del inventario"""
+
+    def __init__(
+        self,
+        id: str,
+        nombre: str,
+        precio: float,
+        categoria: Optional[str] = None,
+        stock: int = 0,
+        descripcion: Optional[str] = None,
+        stock_minimo: int = 5,
+        proveedor_id: Optional[str] = None
+    ):
+        self.id = id
+        self.nombre = nombre
+        self.precio = precio
+        self.categoria = categoria
+        self.stock = stock
+        self.descripcion = descripcion
+        self.stock_minimo = stock_minimo
+        self.proveedor_id = proveedor_id
+
+    def __str__(self) -> str:
+        return f"Producto({self.id}, {self.nombre}, ${self.precio:.2f})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def es_stock_critico(self) -> bool:
+        """Verifica si el stock esta por debajo del minimo"""
+        return self.stock < self.stock_minimo
+
+    def to_dict(self) -> dict:
+        """Convierte el producto a diccionario"""
+        return {
+            'id': self.id,
+            'nombre': self.nombre,
+            'precio': self.precio,
+            'categoria': self.categoria,
+            'stock': self.stock,
+            'descripcion': self.descripcion,
+            'stock_minimo': self.stock_minimo,
+            'proveedor_id': self.proveedor_id
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Producto':
+        """Crea un producto desde un diccionario"""
+        return cls(
+            id=data.get('id'),
+            nombre=data.get('nombre'),
+            precio=data.get('precio', 0.0),
+            categoria=data.get('categoria'),
+            stock=data.get('stock', 0),
+            descripcion=data.get('descripcion'),
+            stock_minimo=data.get('stock_minimo', 5),
+            proveedor_id=data.get('proveedor_id')
+        )
+
+    @classmethod
+    def from_row(cls, row) -> 'Producto':
+        """Crea un producto desde una fila de SQLite"""
+        return cls(
+            id=row['id'],
+            nombre=row['nombre'],
+            precio=row['precio'],
+            categoria=row['categoria'],
+            stock=row['stock'],
+            descripcion=row['descripcion'],
+            stock_minimo=row['stock_minimo'],
+            proveedor_id=row['proveedor_id']
+        )
+
+    def reducir_stock(self, cantidad: int) -> bool:
+        """Reduce el stock del producto"""
+        if cantidad <= self.stock:
+            self.stock -= cantidad
+            return True
+        return False
+
+    def aumentar_stock(self, cantidad: int):
+        """Aumenta el stock del producto"""
+        self.stock += cantidad
+
+    def estado_stock(self) -> str:
+        """Retorna el estado del stock como texto"""
+        if self.stock == 0:
+            return "SIN STOCK"
+        elif self.es_stock_critico():
+            return "STOCK CRITICO"
+        else:
+            return "DISPONIBLE"
+
+
+# ========== modelos/proveedor.py ==========
+"""
+Modelo Proveedor - Representa un proveedor de productos
+"""
+from typing import Optional
+
+
+class Proveedor:
+    """Clase que representa un proveedor"""
+
+    def __init__(
+        self,
+        id: str,
+        nombre: str,
+        telefono: Optional[str] = None,
+        correo: Optional[str] = None,
+        direccion: Optional[str] = None
+    ):
+        self.id = id
+        self.nombre = nombre
+        self.telefono = telefono
+        self.correo = correo
+        self.direccion = direccion
+
+    def __str__(self) -> str:
+        return f"Proveedor({self.id}, {self.nombre})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def to_dict(self) -> dict:
+        """Convierte el proveedor a diccionario"""
+        return {
+            'id': self.id,
+            'nombre': self.nombre,
+            'telefono': self.telefono,
+            'correo': self.correo,
+            'direccion': self.direccion
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Proveedor':
+        """Crea un proveedor desde un diccionario"""
+        return cls(
+            id=data.get('id'),
+            nombre=data.get('nombre'),
+            telefono=data.get('telefono'),
+            correo=data.get('correo'),
+            direccion=data.get('direccion')
+        )
+
+    @classmethod
+    def from_row(cls, row) -> 'Proveedor':
+        """Crea un proveedor desde una fila de SQLite"""
+        return cls(
+            id=row['id'],
+            nombre=row['nombre'],
+            telefono=row['telefono'],
+            correo=row['correo'],
+            direccion=row['direccion']
+        )
+
+
+# ========== modelos/venta.py ==========
+"""
+Modelo Venta - Representa una transaccion de venta
+"""
+from typing import Optional, Union
+from datetime import datetime
+from .producto import Producto
+
+
+class Venta:
+    """Clase que representa una venta"""
+
+    def __init__(
+        self,
+        id: str,
+        cliente: Union[str, object],  # Puede ser cliente_id o objeto Cliente
+        producto: Union[str, Producto],  # Puede ser producto_id o objeto Producto
+        cantidad: float,
+        descuento: float = 0.0,
+        fecha: Optional[str] = None,
+        estado: str = 'activa'
+    ):
+        self.id = id
+        # Guardamos el ID si es string, o el objeto si es un objeto
+        self.cliente = cliente
+        self.producto = producto
+        self.cantidad = cantidad
+        self.descuento = descuento
+        self.fecha = fecha if fecha else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.estado = estado
+
+    def __str__(self) -> str:
+        cliente_id = self.cliente if isinstance(self.cliente, str) else self.cliente.id
+        return f"Venta({self.id}, Cliente: {cliente_id}, Total: ${self.calcular_total():.2f})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    @property
+    def cliente_id(self) -> str:
+        """Retorna el ID del cliente"""
+        if isinstance(self.cliente, str):
+            return self.cliente
+        return self.cliente.id
+
+    @property
+    def producto_id(self) -> str:
+        """Retorna el ID del producto"""
+        if isinstance(self.producto, str):
+            return self.producto
+        return self.producto.id
+
+    def calcular_total(self) -> float:
+        """Calcula el total de la venta aplicando descuento"""
+        if isinstance(self.producto, Producto):
+            subtotal = self.producto.precio * self.cantidad
+        else:
+            # Si solo tenemos el ID, no podemos calcular el total real
+            return 0.0
+
+        descuento_aplicado = subtotal * (self.descuento / 100)
+        return subtotal - descuento_aplicado
+
+    def calcular_total_con_precio(self, precio_unitario: float) -> float:
+        """Calcula el total cuando solo tenemos el precio unitario"""
+        subtotal = precio_unitario * self.cantidad
+        descuento_aplicado = subtotal * (self.descuento / 100)
+        return subtotal - descuento_aplicado
+
+    def es_devuelta(self) -> bool:
+        """Verifica si la venta fue devuelta"""
+        return self.estado == 'devuelta'
+
+    def marcar_devuelta(self):
+        """Marca la venta como devuelta"""
+        self.estado = 'devuelta'
+
+    def to_dict(self) -> dict:
+        """Convierte la venta a diccionario"""
+        return {
+            'id': self.id,
+            'cliente_id': self.cliente_id,
+            'producto_id': self.producto_id,
+            'cantidad': self.cantidad,
+            'descuento': self.descuento,
+            'fecha': self.fecha,
+            'estado': self.estado
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Venta':
+        """Crea una venta desde un diccionario"""
+        return cls(
+            id=data.get('id'),
+            cliente=data.get('cliente_id'),
+            producto=data.get('producto_id'),
+            cantidad=data.get('cantidad', 1),
+            descuento=data.get('descuento', 0.0),
+            fecha=data.get('fecha'),
+            estado=data.get('estado', 'activa')
+        )
+
+    @classmethod
+    def from_row(cls, row) -> 'Venta':
+        """Crea una venta desde una fila de SQLite"""
+        return cls(
+            id=row['id'],
+            cliente=row['cliente_id'],
+            producto=row['producto_id'],
+            cantidad=row['cantidad'],
+            descuento=row['descuento'],
+            fecha=row['fecha'],
+            estado=row['estado']
+        )
+
+
+# ========== modelos/usuario.py ==========
+"""
+Modelo Usuario - Representa un usuario del sistema (admin/cajero)
+"""
+from typing import Optional
+
+
+class Usuario:
+    """Clase que representa un usuario del sistema"""
+
+    ROLES_VALIDOS = ('admin', 'cajero')
+
+    def __init__(
+        self,
+        id: Optional[int],
+        username: str,
+        password: str,
+        rol: str
+    ):
+        self.id = id
+        self.username = username
+        self.password = password
+        self.rol = rol if rol in self.ROLES_VALIDOS else 'cajero'
+
+    def __str__(self) -> str:
+        return f"Usuario({self.id}, {self.username}, {self.rol})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def es_admin(self) -> bool:
+        """Verifica si el usuario es administrador"""
+        return self.rol == 'admin'
+
+    def es_cajero(self) -> bool:
+        """Verifica si el usuario es cajero"""
+        return self.rol == 'cajero'
+
+    def verificar_password(self, password: str) -> bool:
+        """Verifica si la contrasena es correcta"""
+        return self.password == password
+
+    def to_dict(self) -> dict:
+        """Convierte el usuario a diccionario (sin password)"""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'rol': self.rol
+        }
+
+    def to_dict_completo(self) -> dict:
+        """Convierte el usuario a diccionario (con password)"""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'password': self.password,
+            'rol': self.rol
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Usuario':
+        """Crea un usuario desde un diccionario"""
+        return cls(
+            id=data.get('id'),
+            username=data.get('username'),
+            password=data.get('password', ''),
+            rol=data.get('rol', 'cajero')
+        )
+
+    @classmethod
+    def from_row(cls, row) -> 'Usuario':
+        """Crea un usuario desde una fila de SQLite"""
+        return cls(
+            id=row['id'],
+            username=row['username'],
+            password=row['password'],
+            rol=row['rol']
+        )

@@ -1,0 +1,1037 @@
+# ========================================================================
+# CARPETA: vistas/
+# Sistema de Gestion de Ventas - Interfaces graficas con CustomTkinter
+# ========================================================================
+
+
+# ========== vistas/__init__.py ==========
+"""
+Modulo vistas - Interfaces graficas con CustomTkinter
+"""
+from .login import LoginWindow
+from .app import AppPrincipal
+from .vista_dashboard import VistaDashboard
+from .vista_clientes import VistaClientes
+from .vista_productos import VistaProductos
+from .vista_proveedores import VistaProveedores
+from .vista_ventas import VistaVentas
+from .vista_reportes import VistaReportes
+from .vista_factura import generar_factura_pdf
+
+
+# ========== vistas/login.py ==========
+"""
+Pantalla de Login del Sistema de Gestion de Ventas
+"""
+import customtkinter as ctk
+from typing import Optional, Callable
+import sqlite3
+
+# Configurar tema
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+
+class LoginWindow(ctk.CTk):
+    """Ventana de inicio de sesion"""
+
+    def __init__(
+        self,
+        conexion: sqlite3.Connection,
+        on_login_success: Callable,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+
+        self.conexion = conexion
+        self.on_login_success = on_login_success
+        self.usuario_logueado = None
+
+        # Configuracion ventana
+        self.title("Sistema de Ventas - Login")
+        self.geometry("400x500")
+        self.resizable(False, False)
+
+        # Centrar ventana
+        self._centrar_ventana()
+
+        self._crear_widgets()
+
+        # Bind Enter key
+        self.bind("<Return>", lambda e: self._intentar_login())
+
+    def _centrar_ventana(self):
+        """Centra la ventana en la pantalla"""
+        self.update_idletasks()
+        ancho = 400
+        alto = 500
+        x = (self.winfo_screenwidth() - ancho) // 2
+        y = (self.winfo_screenheight() - alto) // 2
+        self.geometry(f"{ancho}x{alto}+{x}+{y}")
+
+    def _crear_widgets(self):
+        """Crea los widgets de la ventana"""
+        # Frame principal
+        self.frame_principal = ctk.CTkFrame(self, corner_radius=0)
+        self.frame_principal.pack(fill="both", expand=True)
+
+        # Logo/Titulo
+        self.frame_logo = ctk.CTkFrame(
+            self.frame_principal,
+            fg_color="#1f538d",
+            height=150,
+            corner_radius=0
+        )
+        self.frame_logo.pack(fill="x")
+        self.frame_logo.pack_propagate(False)
+
+        self.lbl_titulo = ctk.CTkLabel(
+            self.frame_logo,
+            text="Sistema de\nGestion de Ventas",
+            font=ctk.CTkFont(size=28, weight="bold"),
+            text_color="white"
+        )
+        self.lbl_titulo.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Frame formulario
+        self.frame_form = ctk.CTkFrame(
+            self.frame_principal,
+            fg_color="transparent"
+        )
+        self.frame_form.pack(fill="both", expand=True, padx=40, pady=30)
+
+        # Titulo login
+        self.lbl_login = ctk.CTkLabel(
+            self.frame_form,
+            text="Iniciar Sesion",
+            font=ctk.CTkFont(size=22, weight="bold")
+        )
+        self.lbl_login.pack(pady=(20, 30))
+
+        # Campo usuario
+        self.lbl_usuario = ctk.CTkLabel(
+            self.frame_form,
+            text="Usuario",
+            font=ctk.CTkFont(size=14),
+            anchor="w"
+        )
+        self.lbl_usuario.pack(fill="x")
+
+        self.entry_usuario = ctk.CTkEntry(
+            self.frame_form,
+            height=45,
+            font=ctk.CTkFont(size=14),
+            placeholder_text="Ingrese su usuario"
+        )
+        self.entry_usuario.pack(fill="x", pady=(5, 15))
+
+        # Campo password
+        self.lbl_password = ctk.CTkLabel(
+            self.frame_form,
+            text="Contrasena",
+            font=ctk.CTkFont(size=14),
+            anchor="w"
+        )
+        self.lbl_password.pack(fill="x")
+
+        self.entry_password = ctk.CTkEntry(
+            self.frame_form,
+            height=45,
+            font=ctk.CTkFont(size=14),
+            placeholder_text="Ingrese su contrasena",
+            show="*"
+        )
+        self.entry_password.pack(fill="x", pady=(5, 10))
+
+        # Checkbox mostrar password
+        self.var_mostrar = ctk.BooleanVar(value=False)
+        self.chk_mostrar = ctk.CTkCheckBox(
+            self.frame_form,
+            text="Mostrar contrasena",
+            variable=self.var_mostrar,
+            command=self._toggle_password,
+            font=ctk.CTkFont(size=12)
+        )
+        self.chk_mostrar.pack(anchor="w", pady=(0, 20))
+
+        # Label error
+        self.lbl_error = ctk.CTkLabel(
+            self.frame_form,
+            text="",
+            text_color="#FF6B6B",
+            font=ctk.CTkFont(size=12)
+        )
+        self.lbl_error.pack(fill="x", pady=(0, 10))
+
+        # Boton login
+        self.btn_login = ctk.CTkButton(
+            self.frame_form,
+            text="Iniciar Sesion",
+            height=45,
+            font=ctk.CTkFont(size=16, weight="bold"),
+            command=self._intentar_login
+        )
+        self.btn_login.pack(fill="x", pady=(10, 0))
+
+        # Footer
+        self.lbl_footer = ctk.CTkLabel(
+            self.frame_principal,
+            text="Sistema de Gestion de Ventas v1.0",
+            font=ctk.CTkFont(size=11),
+            text_color="gray"
+        )
+        self.lbl_footer.pack(side="bottom", pady=10)
+
+        # Focus inicial
+        self.entry_usuario.focus_set()
+
+    def _toggle_password(self):
+        """Muestra u oculta la contrasena"""
+        if self.var_mostrar.get():
+            self.entry_password.configure(show="")
+        else:
+            self.entry_password.configure(show="*")
+
+    def _intentar_login(self):
+        """Intenta autenticar al usuario"""
+        username = self.entry_usuario.get().strip()
+        password = self.entry_password.get().strip()
+
+        # Validaciones
+        if not username:
+            self.lbl_error.configure(text="Ingrese su nombre de usuario")
+            self.entry_usuario.focus_set()
+            return
+
+        if not password:
+            self.lbl_error.configure(text="Ingrese su contrasena")
+            self.entry_password.focus_set()
+            return
+
+        # Importar controlador
+        from controladores.usuario_controller import UsuarioController
+        from modelos.excepciones import CredencialesInvalidasError
+
+        try:
+            usuario_ctrl = UsuarioController(self.conexion)
+            usuario = usuario_ctrl.autenticar(username, password)
+
+            self.usuario_logueado = usuario
+            self.lbl_error.configure(text="")
+
+            # Llamar callback de exito
+            self.on_login_success(usuario)
+
+        except CredencialesInvalidasError:
+            self.lbl_error.configure(text="Usuario o contrasena incorrectos")
+            self.entry_password.delete(0, "end")
+            self.entry_password.focus_set()
+
+        except Exception as e:
+            self.lbl_error.configure(text=f"Error: {str(e)}")
+
+    def obtener_usuario(self):
+        """Retorna el usuario logueado"""
+        return self.usuario_logueado
+
+
+# ========== vistas/app.py ==========
+"""
+Ventana Principal del Sistema de Gestion de Ventas
+"""
+import customtkinter as ctk
+import sqlite3
+import shutil
+import os
+from datetime import datetime
+from tkinter import filedialog, messagebox
+from typing import Optional
+
+from .componentes.sidebar import Sidebar
+from .vista_dashboard import VistaDashboard
+from .vista_clientes import VistaClientes
+from .vista_productos import VistaProductos
+from .vista_proveedores import VistaProveedores
+from .vista_ventas import VistaVentas
+from .vista_reportes import VistaReportes
+
+# Configurar tema
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+
+class AppPrincipal(ctk.CTkToplevel):
+    """Ventana principal de la aplicacion"""
+
+    def __init__(
+        self,
+        conexion: sqlite3.Connection,
+        usuario,
+        on_logout: callable,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+
+        self.conexion = conexion
+        self.usuario = usuario
+        self.on_logout_callback = on_logout
+        self.vista_actual: Optional[ctk.CTkFrame] = None
+
+        # Configuracion ventana
+        self.title(f"Sistema de Ventas - {usuario.username}")
+        self.geometry("1200x700")
+        self.minsize(1000, 600)
+
+        # Centrar ventana
+        self._centrar_ventana()
+
+        # Manejar cierre de ventana
+        self.protocol("WM_DELETE_WINDOW", self._cerrar_app)
+
+        self._crear_layout()
+        self._crear_barra_estado()
+
+        # Mostrar dashboard por defecto
+        self.sidebar.seleccionar("dashboard")
+
+    def _centrar_ventana(self):
+        """Centra la ventana en la pantalla"""
+        self.update_idletasks()
+        ancho = 1200
+        alto = 700
+        x = (self.winfo_screenwidth() - ancho) // 2
+        y = (self.winfo_screenheight() - alto) // 2
+        self.geometry(f"{ancho}x{alto}+{x}+{y}")
+
+    def _crear_layout(self):
+        """Crea el layout principal"""
+        # Configurar grid
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        # Sidebar
+        self.sidebar = Sidebar(
+            self,
+            usuario=self.usuario,
+            on_navigate=self._navegar,
+            on_logout=self._cerrar_sesion,
+            on_backup=self._crear_backup if self.usuario.es_admin() else None,
+            fg_color=("#2b2b2b", "#1a1a1a")
+        )
+        self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
+
+        # Frame contenido
+        self.frame_contenido = ctk.CTkFrame(self, corner_radius=0)
+        self.frame_contenido.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
+        self.frame_contenido.grid_columnconfigure(0, weight=1)
+        self.frame_contenido.grid_rowconfigure(0, weight=1)
+
+    def _crear_barra_estado(self):
+        """Crea la barra de estado inferior"""
+        self.barra_estado = ctk.CTkFrame(self, height=30, corner_radius=0)
+        self.barra_estado.grid(row=1, column=1, sticky="ew")
+
+        # Conteos
+        self.lbl_clientes = ctk.CTkLabel(
+            self.barra_estado,
+            text="Clientes: 0",
+            font=ctk.CTkFont(size=11)
+        )
+        self.lbl_clientes.pack(side="left", padx=15)
+
+        self.lbl_productos = ctk.CTkLabel(
+            self.barra_estado,
+            text="Productos: 0",
+            font=ctk.CTkFont(size=11)
+        )
+        self.lbl_productos.pack(side="left", padx=15)
+
+        self.lbl_ventas = ctk.CTkLabel(
+            self.barra_estado,
+            text="Ventas: 0",
+            font=ctk.CTkFont(size=11)
+        )
+        self.lbl_ventas.pack(side="left", padx=15)
+
+        # Usuario y hora
+        self.lbl_hora = ctk.CTkLabel(
+            self.barra_estado,
+            text="",
+            font=ctk.CTkFont(size=11)
+        )
+        self.lbl_hora.pack(side="right", padx=15)
+
+        self._actualizar_conteos()
+        self._actualizar_hora()
+
+    def _actualizar_conteos(self):
+        """Actualiza los conteos en la barra de estado"""
+        from controladores.cliente_controller import ClienteController
+        from controladores.producto_controller import ProductoController
+        from controladores.venta_controller import VentaController
+
+        try:
+            cliente_ctrl = ClienteController(self.conexion)
+            producto_ctrl = ProductoController(self.conexion)
+            venta_ctrl = VentaController(self.conexion)
+
+            self.lbl_clientes.configure(text=f"Clientes: {cliente_ctrl.contar()}")
+            self.lbl_productos.configure(text=f"Productos: {producto_ctrl.contar()}")
+            self.lbl_ventas.configure(text=f"Ventas: {venta_ctrl.contar()}")
+        except:
+            pass
+
+    def _actualizar_hora(self):
+        """Actualiza la hora en la barra de estado"""
+        hora_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        self.lbl_hora.configure(text=hora_actual)
+        self.after(1000, self._actualizar_hora)
+
+    def _navegar(self, modulo: str):
+        """Navega a un modulo especifico"""
+        # Destruir vista actual
+        if self.vista_actual:
+            self.vista_actual.destroy()
+
+        # Crear nueva vista
+        if modulo == "dashboard":
+            self.vista_actual = VistaDashboard(
+                self.frame_contenido,
+                self.conexion,
+                self.usuario
+            )
+        elif modulo == "clientes":
+            self.vista_actual = VistaClientes(
+                self.frame_contenido,
+                self.conexion,
+                self.usuario
+            )
+        elif modulo == "productos":
+            self.vista_actual = VistaProductos(
+                self.frame_contenido,
+                self.conexion,
+                self.usuario
+            )
+        elif modulo == "proveedores":
+            self.vista_actual = VistaProveedores(
+                self.frame_contenido,
+                self.conexion,
+                self.usuario
+            )
+        elif modulo == "ventas":
+            self.vista_actual = VistaVentas(
+                self.frame_contenido,
+                self.conexion,
+                self.usuario
+            )
+        elif modulo == "reportes":
+            self.vista_actual = VistaReportes(
+                self.frame_contenido,
+                self.conexion,
+                self.usuario
+            )
+
+        if self.vista_actual:
+            self.vista_actual.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+        # Actualizar conteos
+        self._actualizar_conteos()
+
+    def _crear_backup(self):
+        """Crea una copia de seguridad de la base de datos"""
+        # Seleccionar carpeta
+        carpeta = filedialog.askdirectory(
+            title="Seleccionar carpeta para backup"
+        )
+
+        if not carpeta:
+            return
+
+        try:
+            # Generar nombre con timestamp
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            nombre_backup = f"backup_{timestamp}.db"
+            ruta_backup = os.path.join(carpeta, nombre_backup)
+
+            # Obtener ruta de la BD actual
+            cursor = self.conexion.cursor()
+            cursor.execute("PRAGMA database_list")
+            db_info = cursor.fetchone()
+            ruta_bd = db_info[2] if db_info else "sistema_ventas.db"
+
+            # Copiar archivo
+            shutil.copy2(ruta_bd, ruta_backup)
+
+            messagebox.showinfo(
+                "Backup Exitoso",
+                f"Copia de seguridad creada:\n{ruta_backup}"
+            )
+
+        except Exception as e:
+            messagebox.showerror(
+                "Error",
+                f"Error al crear backup:\n{str(e)}"
+            )
+
+    def _cerrar_sesion(self):
+        """Cierra la sesion actual"""
+        if messagebox.askyesno("Cerrar Sesion", "Desea cerrar la sesion?"):
+            self.destroy()
+            self.on_logout_callback()
+
+    def _cerrar_app(self):
+        """Cierra la aplicacion completamente"""
+        if messagebox.askyesno("Salir", "Desea salir del sistema?"):
+            self.quit()
+            self.destroy()
+
+    def actualizar_vista(self):
+        """Actualiza la vista actual"""
+        if self.vista_actual and hasattr(self.vista_actual, 'actualizar'):
+            self.vista_actual.actualizar()
+        self._actualizar_conteos()
+
+
+# ========== vistas/vista_dashboard.py ==========
+"""
+Vista Dashboard - Panel principal con resumen del sistema
+"""
+import customtkinter as ctk
+import sqlite3
+from typing import List, Tuple
+
+from .componentes.tabla import TablaPersonalizada
+from controladores.cliente_controller import ClienteController
+from controladores.producto_controller import ProductoController
+from controladores.venta_controller import VentaController
+
+
+class TarjetaResumen(ctk.CTkFrame):
+    """Tarjeta de resumen con icono y contador"""
+
+    def __init__(
+        self,
+        parent,
+        titulo: str,
+        valor: str,
+        color: str = "#1f538d",
+        **kwargs
+    ):
+        super().__init__(parent, corner_radius=10, **kwargs)
+
+        self.configure(fg_color=color)
+
+        # Titulo
+        self.lbl_titulo = ctk.CTkLabel(
+            self,
+            text=titulo,
+            font=ctk.CTkFont(size=14),
+            text_color="white"
+        )
+        self.lbl_titulo.pack(pady=(15, 5))
+
+        # Valor
+        self.lbl_valor = ctk.CTkLabel(
+            self,
+            text=valor,
+            font=ctk.CTkFont(size=28, weight="bold"),
+            text_color="white"
+        )
+        self.lbl_valor.pack(pady=(0, 15))
+
+    def actualizar_valor(self, nuevo_valor: str):
+        """Actualiza el valor mostrado"""
+        self.lbl_valor.configure(text=nuevo_valor)
+
+
+class VistaDashboard(ctk.CTkFrame):
+    """Vista del dashboard principal"""
+
+    def __init__(
+        self,
+        parent,
+        conexion: sqlite3.Connection,
+        usuario,
+        **kwargs
+    ):
+        super().__init__(parent, fg_color="transparent", **kwargs)
+
+        self.conexion = conexion
+        self.usuario = usuario
+
+        # Controladores
+        self.cliente_ctrl = ClienteController(conexion)
+        self.producto_ctrl = ProductoController(conexion)
+        self.venta_ctrl = VentaController(conexion)
+
+        self._crear_widgets()
+        self.actualizar()
+
+    def _crear_widgets(self):
+        """Crea los widgets del dashboard"""
+        # Titulo
+        self.lbl_titulo = ctk.CTkLabel(
+            self,
+            text="Dashboard",
+            font=ctk.CTkFont(size=24, weight="bold")
+        )
+        self.lbl_titulo.pack(anchor="w", pady=(0, 20))
+
+        # Frame tarjetas
+        self.frame_tarjetas = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_tarjetas.pack(fill="x", pady=(0, 20))
+
+        # Configurar grid para tarjetas
+        for i in range(4):
+            self.frame_tarjetas.grid_columnconfigure(i, weight=1)
+
+        # Tarjetas
+        self.tarjeta_clientes = TarjetaResumen(
+            self.frame_tarjetas,
+            "Total Clientes",
+            "0",
+            color="#2E7D32"
+        )
+        self.tarjeta_clientes.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+
+        self.tarjeta_productos = TarjetaResumen(
+            self.frame_tarjetas,
+            "Total Productos",
+            "0",
+            color="#1565C0"
+        )
+        self.tarjeta_productos.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
+
+        self.tarjeta_ventas = TarjetaResumen(
+            self.frame_tarjetas,
+            "Total Ventas",
+            "0",
+            color="#7B1FA2"
+        )
+        self.tarjeta_ventas.grid(row=0, column=2, padx=5, pady=5, sticky="nsew")
+
+        self.tarjeta_monto = TarjetaResumen(
+            self.frame_tarjetas,
+            "Monto Total",
+            "S/ 0.00",
+            color="#E65100"
+        )
+        self.tarjeta_monto.grid(row=0, column=3, padx=5, pady=5, sticky="nsew")
+
+        # Frame tablas
+        self.frame_tablas = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_tablas.pack(fill="both", expand=True)
+        self.frame_tablas.grid_columnconfigure(0, weight=1)
+        self.frame_tablas.grid_columnconfigure(1, weight=1)
+        self.frame_tablas.grid_rowconfigure(0, weight=1)
+
+        # Tabla stock critico
+        self.frame_stock = ctk.CTkFrame(self.frame_tablas)
+        self.frame_stock.grid(row=0, column=0, padx=(0, 10), pady=5, sticky="nsew")
+
+        self.lbl_stock = ctk.CTkLabel(
+            self.frame_stock,
+            text="Productos con Stock Critico",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color="#FF6B6B"
+        )
+        self.lbl_stock.pack(anchor="w", padx=10, pady=10)
+
+        self.tabla_stock = TablaPersonalizada(
+            self.frame_stock,
+            columnas=[
+                ("id", "ID", 80),
+                ("nombre", "Producto", 150),
+                ("stock", "Stock", 60),
+                ("minimo", "Minimo", 60),
+                ("estado", "Estado", 100)
+            ]
+        )
+        self.tabla_stock.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+
+        # Tabla ultimas ventas
+        self.frame_ventas = ctk.CTkFrame(self.frame_tablas)
+        self.frame_ventas.grid(row=0, column=1, padx=(10, 0), pady=5, sticky="nsew")
+
+        self.lbl_ventas = ctk.CTkLabel(
+            self.frame_ventas,
+            text="Ultimas 5 Ventas",
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        self.lbl_ventas.pack(anchor="w", padx=10, pady=10)
+
+        self.tabla_ventas = TablaPersonalizada(
+            self.frame_ventas,
+            columnas=[
+                ("id", "ID", 80),
+                ("cliente", "Cliente", 120),
+                ("producto", "Producto", 120),
+                ("total", "Total", 80),
+                ("fecha", "Fecha", 100)
+            ]
+        )
+        self.tabla_ventas.pack(fill="both", expand=True, padx=5, pady=(0, 5))
+
+    def actualizar(self):
+        """Actualiza todos los datos del dashboard"""
+        self._actualizar_tarjetas()
+        self._actualizar_tabla_stock()
+        self._actualizar_tabla_ventas()
+
+    def _actualizar_tarjetas(self):
+        """Actualiza los valores de las tarjetas"""
+        try:
+            # Conteos
+            total_clientes = self.cliente_ctrl.contar()
+            total_productos = self.producto_ctrl.contar()
+
+            # Resumen ventas
+            resumen = self.venta_ctrl.obtener_resumen_ventas()
+            total_ventas = resumen['total_ventas']
+            monto_total = resumen['monto_total']
+
+            # Actualizar tarjetas
+            self.tarjeta_clientes.actualizar_valor(str(total_clientes))
+            self.tarjeta_productos.actualizar_valor(str(total_productos))
+            self.tarjeta_ventas.actualizar_valor(str(total_ventas))
+            self.tarjeta_monto.actualizar_valor(f"S/ {monto_total:,.2f}")
+
+        except Exception as e:
+            print(f"Error actualizando tarjetas: {e}")
+
+    def _actualizar_tabla_stock(self):
+        """Actualiza la tabla de stock critico"""
+        try:
+            productos_criticos = self.producto_ctrl.listar_stock_critico()
+
+            datos = []
+            for prod in productos_criticos:
+                estado = "SIN STOCK" if prod.stock == 0 else "CRITICO"
+                datos.append((
+                    prod.id,
+                    prod.nombre,
+                    prod.stock,
+                    prod.stock_minimo,
+                    estado
+                ))
+
+            def obtener_tag(fila):
+                if fila[2] == 0:
+                    return "critico"
+                return "advertencia"
+
+            self.tabla_stock.cargar_datos(datos, obtener_tag)
+
+        except Exception as e:
+            print(f"Error actualizando tabla stock: {e}")
+
+    def _actualizar_tabla_ventas(self):
+        """Actualiza la tabla de ultimas ventas"""
+        try:
+            ventas = self.venta_ctrl.listar()[:5]  # Ultimas 5
+
+            datos = []
+            for venta in ventas:
+                # Obtener nombre cliente
+                try:
+                    cliente = self.cliente_ctrl.buscar(venta.cliente_id)
+                    cliente_nombre = cliente.nombre[:15]
+                except:
+                    cliente_nombre = venta.cliente_id
+
+                # Obtener nombre producto y calcular total
+                try:
+                    producto = self.producto_ctrl.buscar(venta.producto_id)
+                    producto_nombre = producto.nombre[:15]
+                    total = venta.calcular_total_con_precio(producto.precio)
+                except:
+                    producto_nombre = venta.producto_id
+                    total = 0
+
+                # Formatear fecha
+                fecha = venta.fecha[:10] if venta.fecha else ""
+
+                datos.append((
+                    venta.id,
+                    cliente_nombre,
+                    producto_nombre,
+                    f"S/ {total:.2f}",
+                    fecha
+                ))
+
+            self.tabla_ventas.cargar_datos(datos)
+
+        except Exception as e:
+            print(f"Error actualizando tabla ventas: {e}")
+
+
+# ========== vistas/vista_clientes.py ==========
+"""
+Vista Clientes - CRUD de clientes
+"""
+import customtkinter as ctk
+import sqlite3
+from tkinter import messagebox
+from typing import Optional
+
+from .componentes.tabla import TablaPersonalizada
+from .componentes.formulario import FormularioBase, CampoFormulario
+from controladores.cliente_controller import ClienteController
+from modelos.cliente import Cliente
+
+
+class VistaClientes(ctk.CTkFrame):
+    """Vista CRUD de clientes"""
+
+    def __init__(
+        self,
+        parent,
+        conexion: sqlite3.Connection,
+        usuario,
+        **kwargs
+    ):
+        super().__init__(parent, fg_color="transparent", **kwargs)
+
+        self.conexion = conexion
+        self.usuario = usuario
+        self.controller = ClienteController(conexion)
+        self.cliente_seleccionado: Optional[str] = None
+
+        self._crear_widgets()
+        self.actualizar()
+
+    def _crear_widgets(self):
+        """Crea los widgets de la vista"""
+        # Frame superior
+        self.frame_superior = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_superior.pack(fill="x", pady=(0, 10))
+
+        # Titulo
+        self.lbl_titulo = ctk.CTkLabel(
+            self.frame_superior,
+            text="Gestion de Clientes",
+            font=ctk.CTkFont(size=24, weight="bold")
+        )
+        self.lbl_titulo.pack(side="left")
+
+        # Buscador
+        self.frame_busqueda = ctk.CTkFrame(self.frame_superior, fg_color="transparent")
+        self.frame_busqueda.pack(side="right")
+
+        self.entry_buscar = ctk.CTkEntry(
+            self.frame_busqueda,
+            width=250,
+            height=35,
+            placeholder_text="Buscar por nombre..."
+        )
+        self.entry_buscar.pack(side="left", padx=(0, 5))
+        self.entry_buscar.bind("<KeyRelease>", self._buscar)
+
+        self.btn_buscar = ctk.CTkButton(
+            self.frame_busqueda,
+            text="Buscar",
+            width=80,
+            height=35,
+            command=self._buscar
+        )
+        self.btn_buscar.pack(side="left")
+
+        # Frame botones CRUD
+        self.frame_botones = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_botones.pack(fill="x", pady=(0, 10))
+
+        self.btn_agregar = ctk.CTkButton(
+            self.frame_botones,
+            text="+ Agregar",
+            width=100,
+            height=35,
+            fg_color="#28a745",
+            hover_color="#218838",
+            command=self._abrir_formulario_agregar
+        )
+        self.btn_agregar.pack(side="left", padx=(0, 5))
+
+        self.btn_editar = ctk.CTkButton(
+            self.frame_botones,
+            text="Editar",
+            width=100,
+            height=35,
+            fg_color="#007bff",
+            hover_color="#0056b3",
+            command=self._abrir_formulario_editar
+        )
+        self.btn_editar.pack(side="left", padx=(0, 5))
+
+        self.btn_eliminar = ctk.CTkButton(
+            self.frame_botones,
+            text="Eliminar",
+            width=100,
+            height=35,
+            fg_color="#dc3545",
+            hover_color="#c82333",
+            command=self._eliminar
+        )
+        self.btn_eliminar.pack(side="left", padx=(0, 5))
+
+        # Deshabilitar eliminar para cajeros
+        if not self.usuario.es_admin():
+            self.btn_eliminar.configure(state="disabled")
+
+        self.btn_actualizar = ctk.CTkButton(
+            self.frame_botones,
+            text="Actualizar",
+            width=100,
+            height=35,
+            fg_color="#6c757d",
+            hover_color="#5a6268",
+            command=self.actualizar
+        )
+        self.btn_actualizar.pack(side="left")
+
+        # Tabla
+        self.tabla = TablaPersonalizada(
+            self,
+            columnas=[
+                ("id", "ID", 80),
+                ("nombre", "Nombre", 200),
+                ("correo", "Correo", 180),
+                ("telefono", "Telefono", 120),
+                ("direccion", "Direccion", 200)
+            ],
+            on_select=self._on_seleccionar,
+            on_double_click=self._on_doble_clic
+        )
+        self.tabla.pack(fill="both", expand=True)
+
+    def _buscar(self, event=None):
+        """Busca clientes por nombre"""
+        texto = self.entry_buscar.get().strip()
+        if texto:
+            clientes = self.controller.buscar_por_nombre(texto)
+        else:
+            clientes = self.controller.listar()
+
+        self._cargar_tabla(clientes)
+
+    def _cargar_tabla(self, clientes):
+        """Carga los clientes en la tabla"""
+        datos = []
+        for cliente in clientes:
+            datos.append((
+                cliente.id,
+                cliente.nombre,
+                cliente.correo or "",
+                cliente.telefono or "",
+                cliente.direccion or ""
+            ))
+        self.tabla.cargar_datos(datos)
+
+    def actualizar(self):
+        """Actualiza la tabla con todos los clientes"""
+        clientes = self.controller.listar()
+        self._cargar_tabla(clientes)
+        self.cliente_seleccionado = None
+
+    def _on_seleccionar(self, item_id: str):
+        """Maneja la seleccion de una fila"""
+        self.cliente_seleccionado = self.tabla.obtener_id_seleccion()
+
+    def _on_doble_clic(self, item_id: str):
+        """Maneja el doble clic para editar"""
+        self._abrir_formulario_editar()
+
+    def _obtener_campos_formulario(self) -> list:
+        """Retorna la definicion de campos del formulario"""
+        return [
+            CampoFormulario("id", "ID", "texto", readonly=True),
+            CampoFormulario("nombre", "Nombre", "texto", requerido=True),
+            CampoFormulario("correo", "Correo Electronico", "texto"),
+            CampoFormulario("telefono", "Telefono", "texto"),
+            CampoFormulario("direccion", "Direccion", "texto")
+        ]
+
+    def _abrir_formulario_agregar(self):
+        """Abre el formulario para agregar cliente"""
+        campos = self._obtener_campos_formulario()
+        campos[0].valor_default = "(Automatico)"
+
+        FormularioBase(
+            self,
+            "Agregar Cliente",
+            campos,
+            self._guardar_cliente,
+            modo_edicion=False
+        )
+
+    def _abrir_formulario_editar(self):
+        """Abre el formulario para editar cliente"""
+        if not self.cliente_seleccionado:
+            messagebox.showwarning("Atencion", "Seleccione un cliente para editar")
+            return
+
+        try:
+            cliente = self.controller.buscar(self.cliente_seleccionado)
+            datos = cliente.to_dict()
+
+            FormularioBase(
+                self,
+                "Editar Cliente",
+                self._obtener_campos_formulario(),
+                self._guardar_cliente,
+                datos_iniciales=datos,
+                modo_edicion=True
+            )
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _guardar_cliente(self, datos: dict) -> bool:
+        """Guarda o actualiza un cliente"""
+        try:
+            if datos.get('id') and datos['id'] != "(Automatico)":
+                # Actualizar
+                cliente = Cliente(
+                    id=datos['id'],
+                    nombre=datos['nombre'],
+                    correo=datos.get('correo'),
+                    telefono=datos.get('telefono'),
+                    direccion=datos.get('direccion')
+                )
+                self.controller.actualizar(cliente)
+                messagebox.showinfo("Exito", "Cliente actualizado correctamente")
+            else:
+                # Agregar nuevo
+                cliente = Cliente(
+                    id=None,
+                    nombre=datos['nombre'],
+                    correo=datos.get('correo'),
+                    telefono=datos.get('telefono'),
+                    direccion=datos.get('direccion')
+                )
+                self.controller.agregar(cliente)
+                messagebox.showinfo("Exito", "Cliente agregado correctamente")
+
+            self.actualizar()
+            return True
+
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+            return False
+
+    def _eliminar(self):
+        """Elimina el cliente seleccionado"""
+        if not self.cliente_seleccionado:
+            messagebox.showwarning("Atencion", "Seleccione un cliente para eliminar")
+            return
+
+        if not messagebox.askyesno(
+            "Confirmar",
+            f"Desea eliminar el cliente {self.cliente_seleccionado}?"
+        ):
+            return
+
+        try:
+            self.controller.eliminar(self.cliente_seleccionado)
+            messagebox.showinfo("Exito", "Cliente eliminado correctamente")
+            self.actualizar()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
