@@ -1,177 +1,243 @@
-"""
-Ventana Principal del Sistema de Gestion de Ventas (Versión Simplificada)
-"""
-import customtkinter as ctk
-import sqlite3
+"""Ventana principal del sistema en PyQt6."""
+
 import os
+import shutil
+import sqlite3
 from datetime import datetime
-from typing import Optional
+
+from PyQt6.QtCore import QTimer, QSize, Qt
+from PyQt6.QtGui import QCloseEvent, QFont
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QStackedWidget,
+    QStatusBar,
+    QVBoxLayout,
+    QWidget,
+)
+import qtawesome as qta
 
 from .componentes.sidebar import Sidebar
+from .estilos.qss import get_global_stylesheet
+from .vista_clientes import VistaClientes
+from .vista_dashboard import VistaDashboard
 from .vista_productos import VistaProductos
-from .vista_usuarios import VistaUsuarios
-
-# Configurar tema
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
+from .vista_proveedores import VistaProveedores
+from .vista_reportes import VistaReportes
+from .vista_ventas import VistaVentas
 
 
-class AppPrincipal(ctk.CTkToplevel):
-    """Ventana principal de la aplicacion"""
+class _VistaPlaceholder(QWidget):
+    """Vista temporal para modulos no migrados aun."""
 
-    def __init__(
-        self,
-        conexion: sqlite3.Connection,
-        usuario,
-        on_logout: callable,
-        **kwargs
-    ):
-        super().__init__(**kwargs)
+    def __init__(self, titulo: str, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(8)
 
+        t = QLabel(titulo)
+        t.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
+        layout.addWidget(t)
+
+        desc = QLabel("Vista pendiente de migracion a PyQt6.\nLa logica del modulo se mantiene intacta.")
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+        layout.addStretch(1)
+
+
+class AppPrincipal(QMainWindow):
+    """Ventana principal con sidebar y contenido apilado."""
+
+    def __init__(self, conexion: sqlite3.Connection, usuario, on_logout=None):
+        super().__init__()
         self.conexion = conexion
         self.usuario = usuario
         self.on_logout_callback = on_logout
-        self.vista_actual: Optional[ctk.CTkFrame] = None
+        self._vistas = {
+            "dashboard": VistaDashboard,
+            "clientes": VistaClientes,
+            "productos": VistaProductos,
+            "proveedores": VistaProveedores,
+            "ventas": VistaVentas,
+            "reportes": VistaReportes,
+        }
+        self._cerrando_por_logout = False
 
-        # Configuracion ventana
-        self.title(f"Sistema de Ventas - {usuario.username}")
-        self.geometry("1200x700")
-        self.minsize(1000, 600)
-
-        # Centrar ventana
+        self.setWindowTitle(f"Sistema de Ventas - {self.usuario.username}")
+        self.resize(1250, 760)
+        self.setMinimumSize(1040, 650)
+        self.setStyleSheet(get_global_stylesheet())
         self._centrar_ventana()
-
-        # Manejar cierre de ventana
-        self.protocol("WM_DELETE_WINDOW", self._cerrar_app)
 
         self._crear_layout()
         self._crear_barra_estado()
-
-        # Mostrar productos por defecto
-        self.sidebar.seleccionar("productos")
+        self._configurar_timers()
+        self.navegar("dashboard")
+        self.sidebar.seleccionar("dashboard")
 
     def _centrar_ventana(self):
-        """Centra la ventana en la pantalla"""
-        self.update_idletasks()
-        ancho = 1200
-        alto = 700
-        x = (self.winfo_screenwidth() - ancho) // 2
-        y = (self.winfo_screenheight() - alto) // 2
-        self.geometry(f"{ancho}x{alto}+{x}+{y}")
+        screen = self.screen() or QApplication.primaryScreen()
+        if not screen:
+            return
+        geom = screen.availableGeometry()
+        x = (geom.width() - self.width()) // 2 + geom.x()
+        y = (geom.height() - self.height()) // 2 + geom.y()
+        self.move(x, y)
 
     def _crear_layout(self):
-        """Crea el layout principal"""
-        # Configurar grid
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        central = QWidget(self)
+        self.setCentralWidget(central)
 
-        # Sidebar
-        self.sidebar = Sidebar(
-            self,
-            usuario=self.usuario,
-            on_navigate=self._navegar,
-            on_logout=self._cerrar_sesion,
-            fg_color=("#2b2b2b", "#1a1a1a")
-        )
-        self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
+        layout = QHBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Frame contenido
-        self.frame_contenido = ctk.CTkFrame(self, corner_radius=0)
-        self.frame_contenido.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
-        self.frame_contenido.grid_columnconfigure(0, weight=1)
-        self.frame_contenido.grid_rowconfigure(0, weight=1)
+        self.sidebar = Sidebar(central, self.usuario)
+        self.sidebar.navegacion_cambiada.connect(self.navegar)
+        self.sidebar.logout_solicitado.connect(self._cerrar_sesion)
+        self.sidebar.backup_solicitado.connect(self._crear_backup)
+
+        self.stack = QStackedWidget(central)
+        layout.addWidget(self.sidebar)
+        layout.addWidget(self.stack, 1)
 
     def _crear_barra_estado(self):
-        """Crea la barra de estado inferior"""
-        self.barra_estado = ctk.CTkFrame(self, height=30, corner_radius=0)
-        self.barra_estado.grid(row=1, column=1, sticky="ew")
+        barra = QStatusBar(self)
+        self.setStatusBar(barra)
 
-        # Conteos
-        self.lbl_usuarios = ctk.CTkLabel(
-            self.barra_estado,
-            text="Usuarios: 0",
-            font=ctk.CTkFont(size=11)
+        clientes_widget, self.lbl_clientes = self._crear_label_con_icono("mdi6.account-group", "Clientes: 0", barra)
+        productos_widget, self.lbl_productos = self._crear_label_con_icono("mdi6.package-variant", "Productos: 0", barra)
+        ventas_widget, self.lbl_ventas = self._crear_label_con_icono("mdi6.cart", "Ventas: 0", barra)
+        usuario_widget, self.lbl_usuario = self._crear_label_con_icono(
+            "mdi6.account-circle",
+            f"Usuario: {self.usuario.username} ({self.usuario.rol})",
+            barra,
         )
-        self.lbl_usuarios.pack(side="left", padx=15)
+        hora_widget, self.lbl_hora = self._crear_label_con_icono("mdi6.clock-outline", "", barra)
 
-        self.lbl_productos = ctk.CTkLabel(
-            self.barra_estado,
-            text="Productos: 0",
-            font=ctk.CTkFont(size=11)
-        )
-        self.lbl_productos.pack(side="left", padx=15)
-
-        # Usuario y hora
-        self.lbl_hora = ctk.CTkLabel(
-            self.barra_estado,
-            text="",
-            font=ctk.CTkFont(size=11)
-        )
-        self.lbl_hora.pack(side="right", padx=15)
+        barra.addWidget(clientes_widget)
+        barra.addWidget(productos_widget)
+        barra.addWidget(ventas_widget)
+        barra.addPermanentWidget(usuario_widget)
+        barra.addPermanentWidget(hora_widget)
 
         self._actualizar_conteos()
         self._actualizar_hora()
 
+    def _crear_label_con_icono(self, icono_nombre: str, texto: str, parent):
+        widget = QWidget(parent)
+        lay = QHBoxLayout(widget)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+
+        icono_lbl = QLabel()
+        pixmap = qta.icon(icono_nombre, color="#B0B0B0").pixmap(QSize(14, 14))
+        icono_lbl.setPixmap(pixmap)
+
+        txt_lbl = QLabel(texto)
+        txt_lbl.setStyleSheet("color: #B0B0B0;")
+
+        lay.addWidget(icono_lbl)
+        lay.addWidget(txt_lbl)
+        return widget, txt_lbl
+
+    def _configurar_timers(self):
+        self.timer_conteos = QTimer(self)
+        self.timer_conteos.timeout.connect(self._actualizar_conteos)
+        self.timer_conteos.start(30000)
+
+        self.timer_hora = QTimer(self)
+        self.timer_hora.timeout.connect(self._actualizar_hora)
+        self.timer_hora.start(1000)
+
+    def navegar(self, modulo: str):
+        if modulo not in self._vistas:
+            return
+
+        widget_actual = self.stack.currentWidget()
+        if widget_actual:
+            self.stack.removeWidget(widget_actual)
+            widget_actual.deleteLater()
+
+        nueva_vista = self._vistas[modulo](self.stack, self.conexion, self.usuario)
+        self.stack.addWidget(nueva_vista)
+        self.stack.setCurrentWidget(nueva_vista)
+
+        if hasattr(nueva_vista, "actualizar"):
+            nueva_vista.actualizar()
+        self._actualizar_conteos()
+
     def _actualizar_conteos(self):
-        """Actualiza los conteos en la barra de estado"""
+        from controladores.cliente_controller import ClienteController
         from controladores.producto_controller import ProductoController
-        from controladores.usuario_controller import UsuarioController
+        from controladores.venta_controller import VentaController
 
         try:
-            producto_ctrl = ProductoController(self.conexion)
-            usuario_ctrl = UsuarioController(self.conexion)
-
-            self.lbl_usuarios.configure(text=f"Usuarios: {usuario_ctrl.contar()}")
-            self.lbl_productos.configure(text=f"Productos: {producto_ctrl.contar()}")
-        except:
-            pass
+            clientes = ClienteController(self.conexion).contar()
+            productos = ProductoController(self.conexion).contar()
+            ventas = VentaController(self.conexion).contar()
+            self.lbl_clientes.setText(f"Clientes: {clientes}")
+            self.lbl_productos.setText(f"Productos: {productos}")
+            self.lbl_ventas.setText(f"Ventas: {ventas}")
+        except Exception:
+            self.lbl_clientes.setText("Clientes: -")
+            self.lbl_productos.setText("Productos: -")
+            self.lbl_ventas.setText("Ventas: -")
 
     def _actualizar_hora(self):
-        """Actualiza la hora en la barra de estado"""
-        hora_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        self.lbl_hora.configure(text=hora_actual)
-        self.after(1000, self._actualizar_hora)
+        self.lbl_hora.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
 
-    def _navegar(self, modulo: str):
-        """Navega a un modulo especifico"""
-        # Destruir vista actual
-        if self.vista_actual:
-            self.vista_actual.destroy()
+    def _crear_backup(self):
+        carpeta = QFileDialog.getExistingDirectory(self, "Seleccionar carpeta para backup")
+        if not carpeta:
+            return
 
-        # Crear nueva vista
-        if modulo == "productos":
-            self.vista_actual = VistaProductos(
-                self.frame_contenido,
-                self.conexion,
-                self.usuario
-            )
-        elif modulo == "usuarios":
-            self.vista_actual = VistaUsuarios(
-                self.frame_contenido,
-                self.conexion,
-                self.usuario
-            )
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            nombre_backup = f"backup_{timestamp}.db"
+            ruta_backup = os.path.join(carpeta, nombre_backup)
 
-        if self.vista_actual:
-            self.vista_actual.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+            cursor = self.conexion.cursor()
+            cursor.execute("PRAGMA database_list")
+            db_info = cursor.fetchone()
+            ruta_bd = db_info[2] if db_info else "sistema_ventas.db"
+            shutil.copy2(ruta_bd, ruta_backup)
 
-        # Actualizar conteos
-        self._actualizar_conteos()
+            QMessageBox.information(self, "Backup Exitoso", f"Copia de seguridad creada:\n{ruta_backup}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", f"Error al crear backup:\n{exc}")
 
     def _cerrar_sesion(self):
-        """Cierra la sesion actual"""
-        if messagebox.askyesno("Cerrar Sesion", "Desea cerrar la sesion?"):
-            self.destroy()
-            self.on_logout_callback()
+        respuesta = QMessageBox.question(
+            self,
+            "Cerrar Sesion",
+            "Desea cerrar la sesion?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if respuesta == QMessageBox.StandardButton.Yes:
+            self._cerrando_por_logout = True
+            self.close()
+            if self.on_logout_callback:
+                self.on_logout_callback()
 
-    def _cerrar_app(self):
-        """Cierra la aplicacion completamente"""
-        if messagebox.askyesno("Salir", "Desea salir del sistema?"):
-            self.quit()
-            self.destroy()
-
-    def actualizar_vista(self):
-        """Actualiza la vista actual"""
-        if self.vista_actual and hasattr(self.vista_actual, 'actualizar'):
-            self.vista_actual.actualizar()
-        self._actualizar_conteos()
+    def closeEvent(self, event: QCloseEvent):
+        if self._cerrando_por_logout:
+            event.accept()
+            return
+        respuesta = QMessageBox.question(
+            self,
+            "Salir",
+            "Desea salir del sistema?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if respuesta == QMessageBox.StandardButton.Yes:
+            event.accept()
+        else:
+            event.ignore()

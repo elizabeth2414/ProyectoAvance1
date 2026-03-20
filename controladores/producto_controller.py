@@ -32,6 +32,17 @@ class ProductoController:
 
         return f"PRD-{numero:03d}"
 
+    def previsualizar_id(self) -> str:
+        """Retorna el próximo ID disponible para mostrar en formularios."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id FROM productos ORDER BY id DESC LIMIT 1")
+        resultado = cursor.fetchone()
+        if resultado:
+            numero = int(resultado['id'].split('-')[1]) + 1
+        else:
+            numero = 1
+        return f"PRD-{numero:03d}"
+
     def agregar(self, producto: Producto) -> Producto:
         """Agrega un nuevo producto a la base de datos"""
         if not producto.nombre:

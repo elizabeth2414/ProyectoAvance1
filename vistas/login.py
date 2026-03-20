@@ -1,213 +1,198 @@
-"""
-Pantalla de Login del Sistema de Gestion de Ventas
-"""
-import customtkinter as ctk
-from typing import Optional, Callable
+"""Pantalla de login en PyQt6 con estilo Material Design."""
+
 import sqlite3
+from typing import Callable
 
-# Configurar tema
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+import qtawesome as qta
+
+from .estilos import colores
+from .estilos.qss import get_global_stylesheet
 
 
-class LoginWindow(ctk.CTk):
-    """Ventana de inicio de sesion"""
+class LoginWindow(QMainWindow):
+    """Ventana principal de autenticacion."""
 
-    def __init__(
-        self,
-        conexion: sqlite3.Connection,
-        on_login_success: Callable,
-        **kwargs
-    ):
-        super().__init__(**kwargs)
+    login_exitoso = pyqtSignal(object)
 
+    def __init__(self, conexion: sqlite3.Connection, on_login_success: Callable | None = None):
+        super().__init__()
         self.conexion = conexion
         self.on_login_success = on_login_success
         self.usuario_logueado = None
+        self.password_visible = False
 
-        # Configuracion ventana
-        self.title("Sistema de Ventas - Login")
-        self.geometry("450x620")
-        self.resizable(False, False)
-
-        # Centrar ventana
+        self.setWindowTitle("Sistema de Ventas - Login")
+        self.setFixedSize(900, 600)
+        self.setStyleSheet(get_global_stylesheet())
         self._centrar_ventana()
-
-        self._crear_widgets()
-
-        # Bind Enter key
-        self.bind("<Return>", lambda e: self._intentar_login())
+        self._crear_ui()
 
     def _centrar_ventana(self):
-        """Centra la ventana en la pantalla"""
-        self.update_idletasks()
-        ancho = 450
-        alto = 620
-        x = (self.winfo_screenwidth() - ancho) // 2
-        y = (self.winfo_screenheight() - alto) // 2
-        self.geometry(f"{ancho}x{alto}+{x}+{y}")
+        screen = self.screen().availableGeometry() if self.screen() else self.geometry()
+        x = screen.center().x() - self.width() // 2
+        y = screen.center().y() - self.height() // 2
+        self.move(x, y)
 
-    def _crear_widgets(self):
-        """Crea los widgets de la ventana"""
-        # Frame principal
-        self.frame_principal = ctk.CTkFrame(self, corner_radius=0)
-        self.frame_principal.pack(fill="both", expand=True)
+    def _crear_ui(self):
+        central = QWidget(self)
+        self.setCentralWidget(central)
+        contenedor = QHBoxLayout(central)
+        contenedor.setContentsMargins(0, 0, 0, 0)
+        contenedor.setSpacing(0)
 
-        # Logo/Titulo
-        self.frame_logo = ctk.CTkFrame(
-            self.frame_principal,
-            fg_color="#1f538d",
-            height=150,
-            corner_radius=0
+        panel_izq = QFrame()
+        panel_izq.setStyleSheet(
+            "QFrame {"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {colores.PRIMARY_DARK}, stop:1 {colores.PRIMARY});"
+            "}"
         )
-        self.frame_logo.pack(fill="x")
-        self.frame_logo.pack_propagate(False)
+        izq_layout = QVBoxLayout(panel_izq)
+        izq_layout.setContentsMargins(40, 50, 40, 50)
+        izq_layout.setSpacing(16)
 
-        self.lbl_titulo = ctk.CTkLabel(
-            self.frame_logo,
-            text="Sistema de\nGestion de Ventas",
-            font=ctk.CTkFont(size=28, weight="bold"),
-            text_color="white"
-        )
-        self.lbl_titulo.place(relx=0.5, rely=0.5, anchor="center")
+        logo = QLabel("🧾 Sistema de Gestion\nde Ventas")
+        logo.setStyleSheet("color: white;")
+        logo.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))
+        izq_layout.addWidget(logo)
 
-        # Frame formulario
-        self.frame_form = ctk.CTkFrame(
-            self.frame_principal,
-            fg_color="transparent"
-        )
-        self.frame_form.pack(fill="both", expand=True, padx=30, pady=20)
+        descripcion = QLabel("Controla clientes, productos y ventas\nen una sola plataforma.")
+        descripcion.setStyleSheet("color: rgba(255, 255, 255, 0.85); font-size: 14px;")
+        descripcion.setWordWrap(True)
+        izq_layout.addWidget(descripcion)
+        izq_layout.addStretch(1)
 
-        # Titulo login
-        self.lbl_login = ctk.CTkLabel(
-            self.frame_form,
-            text="Iniciar Sesion",
-            font=ctk.CTkFont(size=22, weight="bold")
-        )
-        self.lbl_login.pack(pady=(10, 15))
+        version = QLabel("Version 1.0")
+        version.setStyleSheet("color: rgba(255, 255, 255, 0.75); font-size: 12px;")
+        izq_layout.addWidget(version)
 
-        # Campo usuario
-        self.lbl_usuario = ctk.CTkLabel(
-            self.frame_form,
-            text="Usuario",
-            font=ctk.CTkFont(size=14),
-            anchor="w"
-        )
-        self.lbl_usuario.pack(fill="x")
+        panel_der = QFrame()
+        der_layout = QVBoxLayout(panel_der)
+        der_layout.setContentsMargins(70, 70, 70, 70)
+        der_layout.setSpacing(14)
 
-        self.entry_usuario = ctk.CTkEntry(
-            self.frame_form,
-            height=45,
-            font=ctk.CTkFont(size=14),
-            placeholder_text="Ingrese su usuario"
-        )
-        self.entry_usuario.pack(fill="x", pady=(5, 15))
+        titulo = QLabel("Bienvenido")
+        titulo.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))
+        der_layout.addWidget(titulo)
 
-        # Campo password
-        self.lbl_password = ctk.CTkLabel(
-            self.frame_form,
-            text="Contrasena",
-            font=ctk.CTkFont(size=14),
-            anchor="w"
-        )
-        self.lbl_password.pack(fill="x")
+        subtitulo = QLabel("Ingresa tus credenciales")
+        subtitulo.setStyleSheet(f"color: {colores.TEXT_SECONDARY}; font-size: 14px;")
+        der_layout.addWidget(subtitulo)
+        der_layout.addSpacing(12)
 
-        self.entry_password = ctk.CTkEntry(
-            self.frame_form,
-            height=45,
-            font=ctk.CTkFont(size=14),
-            placeholder_text="Ingrese su contrasena",
-            show="*"
-        )
-        self.entry_password.pack(fill="x", pady=(5, 8))
+        self.input_usuario = self._crear_input("👤", "Usuario")
+        der_layout.addWidget(self.input_usuario.parentWidget())
 
-        # Checkbox mostrar password
-        self.var_mostrar = ctk.BooleanVar(value=False)
-        self.chk_mostrar = ctk.CTkCheckBox(
-            self.frame_form,
-            text="Mostrar contrasena",
-            variable=self.var_mostrar,
-            command=self._toggle_password,
-            font=ctk.CTkFont(size=12)
-        )
-        self.chk_mostrar.pack(anchor="w", pady=(0, 12))
+        self.input_password = self._crear_input("🔒", "Contrasena", password=True)
+        der_layout.addWidget(self.input_password.parentWidget())
 
-        # Label error
-        self.lbl_error = ctk.CTkLabel(
-            self.frame_form,
-            text="",
-            text_color="#FF6B6B",
-            font=ctk.CTkFont(size=12)
-        )
-        self.lbl_error.pack(fill="x", pady=(0, 8))
+        self.lbl_error = QLabel("")
+        self.lbl_error.setStyleSheet(f"color: {colores.DANGER}; font-size: 12px;")
+        der_layout.addWidget(self.lbl_error)
 
-        # Boton login
-        self.btn_login = ctk.CTkButton(
-            self.frame_form,
-            text="Iniciar Sesion",
-            height=45,
-            font=ctk.CTkFont(size=16, weight="bold"),
-            command=self._intentar_login
-        )
-        self.btn_login.pack(fill="x", pady=(5, 10))
+        self.btn_login = QPushButton("Iniciar Sesion")
+        self.btn_login.setProperty("variant", "primary")
+        self.btn_login.setMinimumHeight(46)
+        self.btn_login.setIcon(qta.icon("mdi6.login", color="white"))
+        self.btn_login.setIconSize(QSize(20, 20))
+        self.btn_login.clicked.connect(self._intentar_login)
+        der_layout.addWidget(self.btn_login)
+        der_layout.addStretch(1)
 
-        # Footer
-        self.lbl_footer = ctk.CTkLabel(
-            self.frame_principal,
-            text="Sistema de Gestion de Ventas v1.0",
-            font=ctk.CTkFont(size=11),
-            text_color="gray"
-        )
-        self.lbl_footer.pack(side="bottom", pady=10)
+        contenedor.addWidget(panel_izq, 4)
+        contenedor.addWidget(panel_der, 6)
 
-        # Focus inicial
-        self.entry_usuario.focus_set()
+        self.input_usuario.returnPressed.connect(self._intentar_login)
+        self.input_password.returnPressed.connect(self._intentar_login)
+        self.input_usuario.setFocus()
+
+    def _crear_input(self, icono: str, placeholder: str, password: bool = False) -> QLineEdit:
+        frame = QFrame(self)
+        frame.setStyleSheet(f"QFrame {{ background-color: {colores.SURFACE}; border-radius: 10px; }}")
+        layout = QHBoxLayout(frame)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(8)
+
+        icono_lbl = QLabel()
+        nombre_qta = "mdi6.account" if not password else "mdi6.lock"
+        pixmap = qta.icon(nombre_qta, color="#B0B0B0").pixmap(QSize(20, 20))
+        icono_lbl.setPixmap(pixmap)
+        layout.addWidget(icono_lbl)
+
+        input_text = QLineEdit()
+        input_text.setPlaceholderText(placeholder)
+        if password:
+            input_text.setEchoMode(QLineEdit.EchoMode.Password)
+        layout.addWidget(input_text)
+        if password:
+            self.btn_eye = QPushButton()
+            self.btn_eye.setIcon(qta.icon("mdi6.eye", color="#B0B0B0"))
+            self.btn_eye.setIconSize(QSize(18, 18))
+            self.btn_eye.setFlat(True)
+            self.btn_eye.setStyleSheet(
+                "QPushButton { background: transparent; border: none; }"
+                "QPushButton:hover { color: white; }"
+            )
+            self.btn_eye.clicked.connect(self._toggle_password)
+            layout.addWidget(self.btn_eye)
+        return input_text
 
     def _toggle_password(self):
-        """Muestra u oculta la contrasena"""
-        if self.var_mostrar.get():
-            self.entry_password.configure(show="")
-        else:
-            self.entry_password.configure(show="*")
+        self.password_visible = not self.password_visible
+        self.input_password.setEchoMode(
+            QLineEdit.EchoMode.Normal if self.password_visible else QLineEdit.EchoMode.Password
+        )
+        self.btn_eye.setIcon(
+            qta.icon("mdi6.eye-off", color="white") if self.password_visible else qta.icon("mdi6.eye", color="white")
+        )
 
     def _intentar_login(self):
-        """Intenta autenticar al usuario"""
-        username = self.entry_usuario.get().strip()
-        password = self.entry_password.get().strip()
+        username = self.input_usuario.text().strip()
+        password = self.input_password.text().strip()
 
-        # Validaciones
         if not username:
-            self.lbl_error.configure(text="Ingrese su nombre de usuario")
-            self.entry_usuario.focus_set()
+            self.lbl_error.setText("Ingrese su nombre de usuario")
+            self.input_usuario.setFocus()
             return
-
         if not password:
-            self.lbl_error.configure(text="Ingrese su contrasena")
-            self.entry_password.focus_set()
+            self.lbl_error.setText("Ingrese su contrasena")
+            self.input_password.setFocus()
             return
 
-        # Importar controlador
         from controladores.usuario_controller import UsuarioController
         from modelos.excepciones import CredencialesInvalidasError
 
         try:
-            usuario_ctrl = UsuarioController(self.conexion)
-            usuario = usuario_ctrl.autenticar(username, password)
-
+            usuario = UsuarioController(self.conexion).autenticar(username, password)
             self.usuario_logueado = usuario
-            self.lbl_error.configure(text="")
-
-            # Llamar callback de exito
-            self.on_login_success(usuario)
-
+            self.lbl_error.setText("")
+            self.login_exitoso.emit(usuario)
+            if self.on_login_success:
+                self.on_login_success(usuario)
         except CredencialesInvalidasError:
-            self.lbl_error.configure(text="Usuario o contrasena incorrectos")
-            self.entry_password.delete(0, "end")
-            self.entry_password.focus_set()
-
-        except Exception as e:
-            self.lbl_error.configure(text=f"Error: {str(e)}")
+            self.lbl_error.setText("Usuario o contrasena incorrectos")
+            self.input_password.clear()
+            self.input_password.setFocus()
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", f"No se pudo iniciar sesion:\n{exc}")
 
     def obtener_usuario(self):
-        """Retorna el usuario logueado"""
         return self.usuario_logueado
+
+    def limpiar_campos(self):
+        self.input_usuario.clear()
+        self.input_password.clear()
+        self.lbl_error.clear()
+        self.input_usuario.setFocus()

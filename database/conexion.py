@@ -125,41 +125,6 @@ def crear_tablas(conn: sqlite3.Connection):
         )
     """)
 
-    # Tabla de cupones
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS cupones (
-            id TEXT PRIMARY KEY,
-            codigo TEXT UNIQUE NOT NULL,
-            descripcion TEXT NOT NULL,
-            tipo_descuento TEXT NOT NULL CHECK(tipo_descuento IN ('porcentaje', 'monto')),
-            valor_descuento REAL NOT NULL,
-            uso_maximo INTEGER DEFAULT -1,
-            usos_actuales INTEGER DEFAULT 0,
-            fecha_inicio TEXT NOT NULL,
-            fecha_fin TEXT,
-            activo INTEGER DEFAULT 1,
-            monto_minimo REAL DEFAULT 0.0
-        )
-    """)
-
-    # Tabla de cuentas por cobrar
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS cuentas_por_cobrar (
-            id TEXT PRIMARY KEY,
-            venta_id TEXT UNIQUE NOT NULL,
-            cliente_id TEXT NOT NULL,
-            monto_total REAL NOT NULL,
-            monto_pagado REAL DEFAULT 0.0,
-            fecha_venta TEXT NOT NULL,
-            fecha_vencimiento TEXT NOT NULL,
-            plazo_dias INTEGER DEFAULT 30,
-            estado TEXT DEFAULT 'pendiente' CHECK(estado IN ('pendiente', 'pagada', 'vencida', 'parcial')),
-            notas TEXT,
-            FOREIGN KEY (venta_id) REFERENCES ventas(id),
-            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
-        )
-    """)
-
     conn.commit()
     print("[OK] Tablas creadas correctamente")
 
@@ -169,7 +134,7 @@ def eliminar_tablas(conn: sqlite3.Connection):
     cursor = conn.cursor()
 
     # Orden importante por las llaves foráneas
-    tablas = ['cuentas_por_cobrar', 'cupones', 'ventas', 'productos', 'clientes', 'proveedores', 'usuarios']
+    tablas = ['ventas', 'productos', 'clientes', 'proveedores', 'usuarios']
 
     for tabla in tablas:
         cursor.execute(f"DROP TABLE IF EXISTS {tabla}")
@@ -181,7 +146,7 @@ def eliminar_tablas(conn: sqlite3.Connection):
 def verificar_tablas(conn: sqlite3.Connection) -> dict:
     """Verifica que todas las tablas existan y retorna conteo de registros"""
     cursor = conn.cursor()
-    tablas = ['usuarios', 'proveedores', 'clientes', 'productos', 'ventas', 'cupones', 'cuentas_por_cobrar']
+    tablas = ['usuarios', 'proveedores', 'clientes', 'productos', 'ventas']
     resultado = {}
 
     for tabla in tablas:
