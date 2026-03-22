@@ -1,10 +1,12 @@
-"""Pantalla de login en PyQt6 con estilo Material Design."""
+"""
+Pantalla de login en PyQt6 con estilo moderno.
+"""
 
 import sqlite3
 from typing import Callable
 
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QPixmap
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -16,6 +18,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 import qtawesome as qta
 
 from .estilos import colores
@@ -53,62 +56,133 @@ class LoginWindow(QMainWindow):
         contenedor.setContentsMargins(0, 0, 0, 0)
         contenedor.setSpacing(0)
 
+        # ── Panel izquierdo ──────────────────────────────────────────
         panel_izq = QFrame()
-        panel_izq.setStyleSheet(
-            "QFrame {"
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {colores.PRIMARY_DARK}, stop:1 {colores.PRIMARY});"
-            "}"
-        )
+        panel_izq.setStyleSheet("QFrame { background-color: #1a1f3c; }")
         izq_layout = QVBoxLayout(panel_izq)
-        izq_layout.setContentsMargins(40, 50, 40, 50)
-        izq_layout.setSpacing(16)
+        izq_layout.setContentsMargins(40, 48, 40, 40)
+        izq_layout.setSpacing(0)
 
-        logo = QLabel("🧾 Sistema de Gestion\nde Ventas")
+        # Ícono
+        icono_frame = QFrame()
+        icono_frame.setFixedSize(46, 46)
+        icono_frame.setStyleSheet(
+            "QFrame { background-color: rgba(255, 255, 255, 0.1); border-radius: 10px; }"
+        )
+
+        icono_inner = QHBoxLayout(icono_frame)
+        icono_inner.setContentsMargins(0, 0, 0, 0)
+
+        icono_pix = QLabel()
+        icono_pix.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icono_pix.setPixmap(qta.icon("mdi6.receipt-text", color="white").pixmap(QSize(24, 24)))
+        icono_inner.addWidget(icono_pix)
+
+        izq_layout.addWidget(icono_frame)
+        izq_layout.addSpacing(24)
+
+        # Título
+        logo = QLabel("Sistema de Gestión\nde Ventas")
         logo.setStyleSheet("color: white;")
-        logo.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))
+        logo.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
+        logo.setWordWrap(True)
         izq_layout.addWidget(logo)
 
+        izq_layout.addSpacing(12)
+
+        # Descripción
         descripcion = QLabel("Controla clientes, productos y ventas\nen una sola plataforma.")
-        descripcion.setStyleSheet("color: rgba(255, 255, 255, 0.85); font-size: 14px;")
+        descripcion.setStyleSheet(
+            "color: rgba(255, 255, 255, 0.55); font-size: 13px;"
+        )
         descripcion.setWordWrap(True)
         izq_layout.addWidget(descripcion)
+
+        izq_layout.addSpacing(24)
+
+        # 🖼️ IMAGEN
+        imagen = QLabel()
+        imagen.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        pixmap = QPixmap("vistas/assets/store.png")  
+
+        pixmap = pixmap.scaled(
+            250, 250,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+
+        imagen.setPixmap(pixmap)
+
+        izq_layout.addWidget(imagen)
+
+        izq_layout.addSpacing(20)
         izq_layout.addStretch(1)
 
-        version = QLabel("Version 1.0")
-        version.setStyleSheet("color: rgba(255, 255, 255, 0.75); font-size: 12px;")
-        izq_layout.addWidget(version)
-
+        # ── Panel derecho ────────────────────────────────────────────
         panel_der = QFrame()
         der_layout = QVBoxLayout(panel_der)
-        der_layout.setContentsMargins(70, 70, 70, 70)
-        der_layout.setSpacing(14)
+        der_layout.setContentsMargins(60, 0, 60, 0)
+        der_layout.setSpacing(0)
+        der_layout.addStretch(1)
 
-        titulo = QLabel("Bienvenido")
-        titulo.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))
+        titulo = QLabel("Bienvenido de nuevo")
+        titulo.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
         der_layout.addWidget(titulo)
 
-        subtitulo = QLabel("Ingresa tus credenciales")
-        subtitulo.setStyleSheet(f"color: {colores.TEXT_SECONDARY}; font-size: 14px;")
-        der_layout.addWidget(subtitulo)
-        der_layout.addSpacing(12)
+        der_layout.addSpacing(4)
 
-        self.input_usuario = self._crear_input("👤", "Usuario")
+        subtitulo = QLabel("Ingresa tus credenciales para continuar")
+        subtitulo.setStyleSheet(f"color: {colores.TEXT_SECONDARY}; font-size: 13px;")
+        der_layout.addWidget(subtitulo)
+
+        der_layout.addSpacing(28)
+
+        # Usuario
+        lbl_usuario = QLabel("Usuario")
+        lbl_usuario.setStyleSheet(
+            f"color: {colores.TEXT_SECONDARY}; font-size: 12px; font-weight: 500;"
+        )
+        der_layout.addWidget(lbl_usuario)
+        der_layout.addSpacing(6)
+
+        self.input_usuario = self._crear_input("mdi6.account", "tu.usuario")
         der_layout.addWidget(self.input_usuario.parentWidget())
 
-        self.input_password = self._crear_input("🔒", "Contrasena", password=True)
+        der_layout.addSpacing(14)
+
+        # Password
+        lbl_password = QLabel("Contraseña")
+        lbl_password.setStyleSheet(
+            f"color: {colores.TEXT_SECONDARY}; font-size: 12px; font-weight: 500;"
+        )
+        der_layout.addWidget(lbl_password)
+        der_layout.addSpacing(6)
+
+        self.input_password = self._crear_input("mdi6.lock", "••••••••", password=True)
         der_layout.addWidget(self.input_password.parentWidget())
 
+        der_layout.addSpacing(20)
+
+        # Error
         self.lbl_error = QLabel("")
         self.lbl_error.setStyleSheet(f"color: {colores.DANGER}; font-size: 12px;")
         der_layout.addWidget(self.lbl_error)
 
-        self.btn_login = QPushButton("Iniciar Sesion")
-        self.btn_login.setProperty("variant", "primary")
-        self.btn_login.setMinimumHeight(46)
+        der_layout.addSpacing(4)
+
+        # Botón login
+        self.btn_login = QPushButton("Iniciar sesión")
+        self.btn_login.setMinimumHeight(42)
+        self.btn_login.setStyleSheet(
+            "QPushButton { background-color: #4f46e5; color: white; border-radius: 8px; }"
+            "QPushButton:hover { background-color: #4338ca; }"
+        )
         self.btn_login.setIcon(qta.icon("mdi6.login", color="white"))
-        self.btn_login.setIconSize(QSize(20, 20))
+        self.btn_login.setIconSize(QSize(18, 18))
         self.btn_login.clicked.connect(self._intentar_login)
         der_layout.addWidget(self.btn_login)
+
         der_layout.addStretch(1)
 
         contenedor.addWidget(panel_izq, 4)
@@ -118,44 +192,41 @@ class LoginWindow(QMainWindow):
         self.input_password.returnPressed.connect(self._intentar_login)
         self.input_usuario.setFocus()
 
-    def _crear_input(self, icono: str, placeholder: str, password: bool = False) -> QLineEdit:
+    def _crear_input(self, nombre_qta: str, placeholder: str, password: bool = False) -> QLineEdit:
         frame = QFrame(self)
-        frame.setStyleSheet(f"QFrame {{ background-color: {colores.SURFACE}; border-radius: 10px; }}")
+        frame.setFixedHeight(42)
+        frame.setStyleSheet(
+            f"QFrame {{ background-color: {colores.SURFACE}; border-radius: 8px; }}"
+        )
+
         layout = QHBoxLayout(frame)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(12, 0, 12, 0)
 
         icono_lbl = QLabel()
-        nombre_qta = "mdi6.account" if not password else "mdi6.lock"
-        pixmap = qta.icon(nombre_qta, color="#B0B0B0").pixmap(QSize(20, 20))
-        icono_lbl.setPixmap(pixmap)
+        icono_lbl.setPixmap(qta.icon(nombre_qta, color="#B0B0B0").pixmap(QSize(18, 18)))
         layout.addWidget(icono_lbl)
 
         input_text = QLineEdit()
         input_text.setPlaceholderText(placeholder)
+        input_text.setStyleSheet("border: none; background: transparent;")
         if password:
             input_text.setEchoMode(QLineEdit.EchoMode.Password)
+
         layout.addWidget(input_text)
+
         if password:
             self.btn_eye = QPushButton()
             self.btn_eye.setIcon(qta.icon("mdi6.eye", color="#B0B0B0"))
-            self.btn_eye.setIconSize(QSize(18, 18))
             self.btn_eye.setFlat(True)
-            self.btn_eye.setStyleSheet(
-                "QPushButton { background: transparent; border: none; }"
-                "QPushButton:hover { color: white; }"
-            )
             self.btn_eye.clicked.connect(self._toggle_password)
             layout.addWidget(self.btn_eye)
+
         return input_text
 
     def _toggle_password(self):
         self.password_visible = not self.password_visible
         self.input_password.setEchoMode(
             QLineEdit.EchoMode.Normal if self.password_visible else QLineEdit.EchoMode.Password
-        )
-        self.btn_eye.setIcon(
-            qta.icon("mdi6.eye-off", color="white") if self.password_visible else qta.icon("mdi6.eye", color="white")
         )
 
     def _intentar_login(self):
@@ -164,11 +235,9 @@ class LoginWindow(QMainWindow):
 
         if not username:
             self.lbl_error.setText("Ingrese su nombre de usuario")
-            self.input_usuario.setFocus()
             return
         if not password:
-            self.lbl_error.setText("Ingrese su contrasena")
-            self.input_password.setFocus()
+            self.lbl_error.setText("Ingrese su contraseña")
             return
 
         from controladores.usuario_controller import UsuarioController
@@ -179,20 +248,15 @@ class LoginWindow(QMainWindow):
             self.usuario_logueado = usuario
             self.lbl_error.setText("")
             self.login_exitoso.emit(usuario)
+
             if self.on_login_success:
                 self.on_login_success(usuario)
+
         except CredencialesInvalidasError:
-            self.lbl_error.setText("Usuario o contrasena incorrectos")
-            self.input_password.clear()
-            self.input_password.setFocus()
+            self.lbl_error.setText("Usuario o contraseña incorrectos")
         except Exception as exc:
-            QMessageBox.critical(self, "Error", f"No se pudo iniciar sesion:\n{exc}")
+            QMessageBox.critical(self, "Error", str(exc))
 
     def obtener_usuario(self):
         return self.usuario_logueado
-
-    def limpiar_campos(self):
-        self.input_usuario.clear()
-        self.input_password.clear()
-        self.lbl_error.clear()
-        self.input_usuario.setFocus()
+    
