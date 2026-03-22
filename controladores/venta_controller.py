@@ -340,57 +340,105 @@ class VentaController:
 
         return [(row['dia'], row['total'] or 0) for row in cursor.fetchall()]
 
-    def ventas_por_mes(self, anio: int) -> list:
-        """Obtiene ventas agrupadas por mes de un anio especifico"""
+    def ventas_por_mes(self, anio: int, fecha_inicio: str = None, fecha_fin: str = None) -> list:
+        """Obtiene ventas agrupadas por mes de un anio especifico o rango de fechas"""
         cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT
-                strftime('%m', v.fecha) as mes,
-                SUM(p.precio * v.cantidad * (1 - v.descuento/100)) as total
-            FROM ventas v
-            JOIN productos p ON v.producto_id = p.id
-            WHERE v.estado = 'activa'
-              AND strftime('%Y', v.fecha) = ?
-            GROUP BY strftime('%m', v.fecha)
-            ORDER BY mes
-        """, (str(anio),))
+        
+        if fecha_inicio and fecha_fin:
+            # Usar rango de fechas
+            cursor.execute("""
+                SELECT
+                    strftime('%Y-%m', v.fecha) as mes,
+                    SUM(p.precio * v.cantidad * (1 - v.descuento/100)) as total
+                FROM ventas v
+                JOIN productos p ON v.producto_id = p.id
+                WHERE v.estado = 'activa'
+                  AND DATE(v.fecha) BETWEEN ? AND ?
+                GROUP BY strftime('%Y-%m', v.fecha)
+                ORDER BY mes
+            """, (fecha_inicio, fecha_fin))
+            
+            resultados = [(row['mes'], row['total'] or 0) for row in cursor.fetchall()]
+            return resultados if resultados else []
+        else:
+            # Usar año completo (comportamiento original)
+            cursor.execute("""
+                SELECT
+                    strftime('%m', v.fecha) as mes,
+                    SUM(p.precio * v.cantidad * (1 - v.descuento/100)) as total
+                FROM ventas v
+                JOIN productos p ON v.producto_id = p.id
+                WHERE v.estado = 'activa'
+                  AND strftime('%Y', v.fecha) = ?
+                GROUP BY strftime('%m', v.fecha)
+                ORDER BY mes
+            """, (str(anio),))
 
-        meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-                 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+            meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                     'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
-        resultados = {row['mes']: row['total'] or 0 for row in cursor.fetchall()}
+            resultados = {row['mes']: row['total'] or 0 for row in cursor.fetchall()}
 
-        return [(meses[i], resultados.get(f'{i+1:02d}', 0)) for i in range(12)]
+            return [(meses[i], resultados.get(f'{i+1:02d}', 0)) for i in range(12)]
 
-    def top_productos(self, limite: int = 5) -> list:
-        """Obtiene los productos mas vendidos"""
+    def top_productos(self, limite: int = 5, fecha_inicio: str = None, fecha_fin: str = None) -> list:
+        """Obtiene los productos mas vendidos, opcionalmente filtrado por fechas"""
         cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT
-                p.nombre,
-                SUM(v.cantidad) as total_vendido
-            FROM ventas v
-            JOIN productos p ON v.producto_id = p.id
-            WHERE v.estado = 'activa'
-            GROUP BY v.producto_id
-            ORDER BY total_vendido DESC
-            LIMIT ?
-        """, (limite,))
+        
+        if fecha_inicio and fecha_fin:
+            cursor.execute("""
+                SELECT
+                    p.nombre,
+                    SUM(v.cantidad) as total_vendido
+                FROM ventas v
+                JOIN productos p ON v.producto_id = p.id
+                WHERE v.estado = 'activa'
+                  AND DATE(v.fecha) BETWEEN ? AND ?
+                GROUP BY v.producto_id
+                ORDER BY total_vendido DESC
+                LIMIT ?
+            """, (fecha_inicio, fecha_fin, limite))
+        else:
+            cursor.execute("""
+                SELECT
+                    p.nombre,
+                    SUM(v.cantidad) as total_vendido
+                FROM ventas v
+                JOIN productos p ON v.producto_id = p.id
+                WHERE v.estado = 'activa'
+                GROUP BY v.producto_id
+                ORDER BY total_vendido DESC
+                LIMIT ?
+            """, (limite,))
 
         return [(row['nombre'], row['total_vendido'] or 0) for row in cursor.fetchall()]
 
-    def ventas_por_categoria(self) -> list:
-        """Obtiene ventas agrupadas por categoria de producto"""
+    def ventas_por_categoria(self, fecha_inicio: str = None, fecha_fin: str = None) -> list:
+        """Obtiene ventas agrupadas por categoria, opcionalmente filtrado por fechas"""
         cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT
-                COALESCE(p.categoria, 'Sin Categoria') as categoria,
-                SUM(p.precio * v.cantidad * (1 - v.descuento/100)) as total
-            FROM ventas v
-            JOIN productos p ON v.producto_id = p.id
-            WHERE v.estado = 'activa'
-            GROUP BY p.categoria
-            ORDER BY total DESC
-        """)
+        
+        if fecha_inicio and fecha_fin:
+            cursor.execute("""
+                SELECT
+                    COALESCE(p.categoria, 'Sin Categoria') as categoria,
+                    SUM(p.precio * v.cantidad * (1 - v.descuento/100)) as total
+                FROM ventas v
+                JOIN productos p ON v.producto_id = p.id
+                WHERE v.estado = 'activa'
+                  AND DATE(v.fecha) BETWEEN ? AND ?
+                GROUP BY p.categoria
+                ORDER BY total DESC
+            """, (fecha_inicio, fecha_fin))
+        else:
+            cursor.execute("""
+                SELECT
+                    COALESCE(p.categoria, 'Sin Categoria') as categoria,
+                    SUM(p.precio * v.cantidad * (1 - v.descuento/100)) as total
+                FROM ventas v
+                JOIN productos p ON v.producto_id = p.id
+                WHERE v.estado = 'activa'
+                GROUP BY p.categoria
+                ORDER BY total DESC
+            """)
 
         return [(row['categoria'], row['total'] or 0) for row in cursor.fetchall()]

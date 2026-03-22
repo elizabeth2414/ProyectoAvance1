@@ -2,8 +2,9 @@
 
 import sqlite3
 from datetime import datetime, timedelta
+import numpy as np
 
-from PyQt6.QtCore import QSize
+from PyQt6.QtCore import QSize, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -21,6 +22,7 @@ import qtawesome as qta
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+import matplotlib.animation as animation
 
 from controladores.venta_controller import VentaController
 from vistas.estilos.colores import (
@@ -79,7 +81,6 @@ class VistaReportes(QWidget):
         self.venta_ctrl = VentaController(conexion)
 
         self._crear_ui()
-        self._toggle_fechas()
         self.generar_reporte()
 
     def _crear_ui(self):
@@ -96,16 +97,19 @@ class VistaReportes(QWidget):
         self.combo_tipo = QComboBox(self)
         self.combo_tipo.addItems(
             [
-                "Ventas por Día (últimos 30 días)",
-                "Ventas por Mes (año actual)",
+                "Ventas por Día",
+                "Ventas por Mes",
                 "Top 5 Productos más vendidos",
                 "Ventas por Categoría",
             ]
         )
-        self.combo_tipo.currentTextChanged.connect(self._toggle_fechas)
+        self.combo_tipo.currentTextChanged.connect(self.generar_reporte)
 
         self.input_inicio = QLineEdit((datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d"))
         self.input_fin = QLineEdit(datetime.now().strftime("%Y-%m-%d"))
+        
+        lbl_inicio = QLabel("Desde:")
+        lbl_fin = QLabel("Hasta:")
 
         btn_generar = QPushButton("Generar Reporte")
         _aplicar_estilo_boton(btn_generar, "btn-success")
@@ -116,7 +120,9 @@ class VistaReportes(QWidget):
         btn_exportar.clicked.connect(self.exportar_png)
 
         controls.addWidget(self.combo_tipo, 2)
+        controls.addWidget(lbl_inicio)
         controls.addWidget(self.input_inicio)
+        controls.addWidget(lbl_fin)
         controls.addWidget(self.input_fin)
         controls.addWidget(btn_generar)
         controls.addWidget(btn_exportar)
@@ -132,12 +138,23 @@ class VistaReportes(QWidget):
         grafico_layout.addWidget(self.canvas)
         layout.addWidget(grafico_frame, 1)
 
-    def _toggle_fechas(self):
-        es_dia = self.combo_tipo.currentText() == "Ventas por Día (últimos 30 días)"
-        self.input_inicio.setEnabled(es_dia)
-        self.input_fin.setEnabled(es_dia)
+    def generar_reporte(self):
+        """Genera el reporte según el tipo seleccionado y las fechas"""
+        tipo = self.combo_tipo.currentText()
+        try:
+            if tipo == "Ventas por Día":
+                self._grafico_ventas_dia()
+            elif tipo == "Ventas por Mes":
+                self._grafico_ventas_mes()
+            elif tipo == "Top 5 Productos más vendidos":
+                self._grafico_top_productos()
+            else:
+                self._grafico_ventas_categoria()
+        except Exception as exc:
+            _msg(self, QMessageBox.Icon.Critical, "Error", str(exc))
 
     def _estilo_axes(self, titulo: str):
+        """Aplica estilos a los ejes del gráfico"""
         self.figure.patch.set_facecolor("#1E1E1E")
         self.ax.set_facecolor("#1E1E1E")
         self.ax.set_title(titulo, color=TEXT_PRIMARY, fontsize=13, fontweight="bold")
@@ -159,20 +176,6 @@ class VistaReportes(QWidget):
         self.ax.set_yticks([])
         self.canvas.draw()
 
-    def generar_reporte(self):
-        tipo = self.combo_tipo.currentText()
-        try:
-            if tipo == "Ventas por Día (últimos 30 días)":
-                self._grafico_ventas_dia()
-            elif tipo == "Ventas por Mes (año actual)":
-                self._grafico_ventas_mes()
-            elif tipo == "Top 5 Productos más vendidos":
-                self._grafico_top_productos()
-            else:
-                self._grafico_ventas_categoria()
-        except Exception as exc:
-            _msg(self, QMessageBox.Icon.Critical, "Error", str(exc))
-
     def _grafico_ventas_dia(self):
         fi = self.input_inicio.text().strip()
         ff = self.input_fin.text().strip()
@@ -191,47 +194,201 @@ class VistaReportes(QWidget):
         x = [d[0] for d in datos]
         y = [float(d[1]) for d in datos]
         self._limpiar_figura()
-        self._estilo_axes("Ventas por Día")
-        bars = self.ax.bar(x, y, color=PRIMARY)
-        self.ax.set_ylabel("Monto S/")
+        self._estilo_axes(f"Ventas por Día ({fi} a {ff})")
+        
+        # Crear barras con altura inicial 0
+        bars = self.ax.bar(x, [0] * len(y), color=PRIMARY, edgecolor=TEXT_PRIMARY, linewidth=1.5)
+        self.ax.set_ylabel("Monto S/", color=TEXT_PRIMARY)
+        self.ax.set_xlabel("Fecha", color=TEXT_PRIMARY)
+        self.ax.set_ylim(0, max(y) * 1.1 if max(y) > 0 else 1)
+        
         if len(x) > 10:
             self.ax.tick_params(axis="x", rotation=45)
-        for b, v in zip(bars, y):
-            self.ax.text(b.get_x() + b.get_width() / 2, b.get_height(), f"{v:.0f}", ha="center", va="bottom", color=TEXT_PRIMARY, fontsize=8)
+        
+        self.ax.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        # Animación de crecimiento de barras
+        self._animar_barras(bars, y, x)
+        
+        self.figure.tight_layout()
         self.canvas.draw()
+
+    def _animar_barras(self, bars, valores, etiquetas):
+        """Anima el crecimiento de las barras."""
+        max_frames = 30
+        
+        def actualizar_frame(frame):
+            progreso = frame / max_frames
+            for bar, valor in zip(bars, valores):
+                bar.set_height(valor * progreso)
+            self.canvas.draw_idle()
+        
+        # Usar timer para animar
+        self.frame_actual = 0
+        self.timer_anim = QTimer(self)
+        
+        def on_timer():
+            if self.frame_actual <= max_frames:
+                actualizar_frame(self.frame_actual)
+                
+                # Agregar texto sobre barras en el último frame
+                if self.frame_actual == max_frames:
+                    for bar, v in zip(bars, valores):
+                        if v > 0:
+                            self.ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), 
+                                       f"S/{v:.0f}", ha="center", va="bottom", color=SUCCESS, fontsize=9, fontweight='bold')
+                    self.canvas.draw()
+                
+                self.frame_actual += 1
+            else:
+                self.timer_anim.stop()
+        
+        self.timer_anim.timeout.connect(on_timer)
+        self.timer_anim.start(16)  # ~60 FPS
 
     def _grafico_ventas_mes(self):
-        datos = self.venta_ctrl.ventas_por_mes(datetime.now().year)
-        x = [d[0] for d in datos]
-        y = [float(d[1]) for d in datos]
-        self._limpiar_figura()
-        self._estilo_axes("Ventas por Mes")
-        colores = ["#0D47A1", "#1565C0", "#1976D2", "#1E88E5", "#2196F3", "#42A5F5", "#64B5F6", "#90CAF9", "#BBDEFB", "#64B5F6", "#1E88E5", "#1565C0"]
-        bars = self.ax.bar(x, y, color=colores[: len(x)])
-        self.ax.set_ylabel("Monto S/")
-        for b, v in zip(bars, y):
-            if v > 0:
-                self.ax.text(b.get_x() + b.get_width() / 2, b.get_height(), f"{v:.0f}", ha="center", va="bottom", color=TEXT_PRIMARY, fontsize=8)
-        self.canvas.draw()
+        fi = self.input_inicio.text().strip()
+        ff = self.input_fin.text().strip()
+        try:
+            datetime.strptime(fi, "%Y-%m-%d")
+            datetime.strptime(ff, "%Y-%m-%d")
+        except ValueError:
+            _msg(self, QMessageBox.Icon.Warning, "Atención", "Formato de fecha inválido. Use YYYY-MM-DD")
+            return
 
-    def _grafico_top_productos(self):
-        datos = self.venta_ctrl.top_productos(5)
+        datos = self.venta_ctrl.ventas_por_mes(datetime.now().year, fi, ff)
         if not datos:
             self._sin_datos()
             return
-        ylabels = [d[0] for d in datos]
-        vals = [float(d[1]) for d in datos]
+        
+        x = [d[0] for d in datos]
+        y = [float(d[1]) for d in datos]
         self._limpiar_figura()
-        self._estilo_axes("Top 5 Productos más vendidos")
-        bars = self.ax.barh(ylabels, vals, color=PALETA[: len(vals)])
-        self.ax.set_xlabel("Cantidad vendida")
-        self.ax.invert_yaxis()
-        for b, v in zip(bars, vals):
-            self.ax.text(v, b.get_y() + b.get_height() / 2, f" {v:.0f}", va="center", color=TEXT_PRIMARY)
+        self._estilo_axes(f"Ventas por Mes ({fi} a {ff})")
+        colores = ["#1565C0", "#1976D2", "#1E88E5", "#2196F3", "#42A5F5", "#64B5F6"]
+        
+        # Crear barras con altura inicial 0
+        bars = self.ax.bar(x, [0] * len(y), color=colores[: len(x)], edgecolor=TEXT_PRIMARY, linewidth=1.5)
+        self.ax.set_ylabel("Monto S/", color=TEXT_PRIMARY)
+        self.ax.set_xlabel("Período", color=TEXT_PRIMARY)
+        self.ax.set_ylim(0, max(y) * 1.1 if max(y) > 0 else 1)
+        
+        self.ax.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        # Animación de crecimiento
+        self._animar_barras_mes(bars, y)
+        
+        self.figure.tight_layout()
         self.canvas.draw()
 
+    def _animar_barras_mes(self, bars, valores):
+        """Anima el crecimiento de las barras de mes."""
+        max_frames = 30
+        
+        def actualizar_frame(frame):
+            progreso = frame / max_frames
+            for bar, valor in zip(bars, valores):
+                bar.set_height(valor * progreso)
+            self.canvas.draw_idle()
+        
+        self.frame_actual = 0
+        self.timer_anim = QTimer(self)
+        
+        def on_timer():
+            if self.frame_actual <= max_frames:
+                actualizar_frame(self.frame_actual)
+                
+                if self.frame_actual == max_frames:
+                    for b, v in zip(bars, valores):
+                        if v > 0:
+                            self.ax.text(b.get_x() + b.get_width() / 2, b.get_height(), 
+                                       f"S/{v:.0f}", ha="center", va="bottom", color=SUCCESS, fontsize=10, fontweight='bold')
+                    self.canvas.draw()
+                
+                self.frame_actual += 1
+            else:
+                self.timer_anim.stop()
+        
+        self.timer_anim.timeout.connect(on_timer)
+        self.timer_anim.start(16)
+
+    def _grafico_top_productos(self):
+        fi = self.input_inicio.text().strip()
+        ff = self.input_fin.text().strip()
+        try:
+            datetime.strptime(fi, "%Y-%m-%d")
+            datetime.strptime(ff, "%Y-%m-%d")
+        except ValueError:
+            _msg(self, QMessageBox.Icon.Warning, "Atención", "Formato de fecha inválido. Use YYYY-MM-DD")
+            return
+
+        datos = self.venta_ctrl.top_productos(5, fi, ff)
+        if not datos:
+            self._sin_datos()
+            return
+        
+        ylabels = [d[0][:25] for d in datos]
+        vals = [float(d[1]) for d in datos]
+        self._limpiar_figura()
+        self._estilo_axes(f"Top 5 Productos ({fi} a {ff})")
+        colors = PALETA[: len(vals)]
+        
+        # Crear barras con ancho inicial 0
+        bars = self.ax.barh(ylabels, [0] * len(vals), color=colors, edgecolor=TEXT_PRIMARY, linewidth=1.5)
+        self.ax.set_xlabel("Cantidad vendida", color=TEXT_PRIMARY)
+        self.ax.set_xlim(0, max(vals) * 1.1 if max(vals) > 0 else 1)
+        self.ax.invert_yaxis()
+        
+        self.ax.grid(axis='x', alpha=0.3, linestyle='--')
+        
+        # Animación de crecimiento
+        self._animar_barras_h(bars, vals)
+        
+        self.figure.tight_layout()
+        self.canvas.draw()
+
+    def _animar_barras_h(self, bars, valores):
+        """Anima el crecimiento de las barras horizontales."""
+        max_frames = 30
+        
+        def actualizar_frame(frame):
+            progreso = frame / max_frames
+            for bar, valor in zip(bars, valores):
+                bar.set_width(valor * progreso)
+            self.canvas.draw_idle()
+        
+        self.frame_actual = 0
+        self.timer_anim = QTimer(self)
+        
+        def on_timer():
+            if self.frame_actual <= max_frames:
+                actualizar_frame(self.frame_actual)
+                
+                if self.frame_actual == max_frames:
+                    for b, v in zip(bars, valores):
+                        if v > 0:
+                            self.ax.text(v, b.get_y() + b.get_height() / 2, f"  {v:.0f} unid.", 
+                                       va="center", color=SUCCESS, fontsize=10, fontweight='bold')
+                    self.canvas.draw()
+                
+                self.frame_actual += 1
+            else:
+                self.timer_anim.stop()
+        
+        self.timer_anim.timeout.connect(on_timer)
+        self.timer_anim.start(16)
+
     def _grafico_ventas_categoria(self):
-        datos = self.venta_ctrl.ventas_por_categoria()
+        fi = self.input_inicio.text().strip()
+        ff = self.input_fin.text().strip()
+        try:
+            datetime.strptime(fi, "%Y-%m-%d")
+            datetime.strptime(ff, "%Y-%m-%d")
+        except ValueError:
+            _msg(self, QMessageBox.Icon.Warning, "Atención", "Formato de fecha inválido. Use YYYY-MM-DD")
+            return
+
+        datos = self.venta_ctrl.ventas_por_categoria(fi, ff)
         if not datos:
             self._sin_datos()
             return
@@ -241,51 +398,44 @@ class VistaReportes(QWidget):
 
         self._limpiar_figura()
 
-        # Usar subplots con espacio para leyenda
+        # Crear gráfico de pastel
         self.ax = self.figure.add_subplot(111)
-        self._estilo_axes("Ventas por Categoría")
+        self._estilo_axes(f"Ventas por Categoría ({fi} a {ff})")
 
-        explode = [0.03] * len(vals)
+        explode = [0.05] * len(vals)
         colores = PALETA[:len(vals)]
 
+        # Crear el pastel
         wedges, texts, autotexts = self.ax.pie(
             vals,
+            labels=labels,
             autopct="%1.1f%%",
             startangle=90,
             colors=colores,
             explode=explode,
-            pctdistance=0.75,
-            labeldistance=None,
+            pctdistance=0.85,
             wedgeprops={"linewidth": 2, "edgecolor": "#1E1E1E"},
+            shadow=True,
         )
+
+        # Estilo de etiquetas
+        for text in texts:
+            text.set_color(TEXT_PRIMARY)
+            text.set_fontsize(10)
+            text.set_fontweight('bold')
 
         # Estilo de porcentajes
         for autotext in autotexts:
             autotext.set_color("white")
-            autotext.set_fontsize(10)
+            autotext.set_fontsize(9)
             autotext.set_fontweight("bold")
 
-        # Leyenda externa con montos formateada
-        leyenda_labels = [f"{l}  —  S/ {v:,.2f}" for l, v in zip(labels, vals)]
-
-        self.ax.legend(
-            wedges,
-            leyenda_labels,
-            loc="center left",
-            bbox_to_anchor=(1.05, 0.5),
-            frameon=True,
-            facecolor="#2D2D2D",
-            edgecolor="#3D3D3D",
-            labelcolor="#FFFFFF",
-            fontsize=10,
-            borderpad=1,
-            labelspacing=1.2,
-        )
-
-        # Ajustar para que la leyenda no se corte
-        self.figure.subplots_adjust(left=0.05, right=0.65, top=0.92, bottom=0.05)
-
+        self.figure.tight_layout()
         self.canvas.draw()
+
+    def _animar_pie(self, ax, angulo_inicio, angulo_fin, duracion_frames):
+        """Animación de pastel deshabilitada (no compatible con matplotlib)."""
+        pass
 
     def exportar_png(self):
         dialog = QFileDialog(self)

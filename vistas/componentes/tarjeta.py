@@ -1,15 +1,29 @@
-"""Tarjeta de resumen con estilo Material Design."""
+"""Tarjeta de resumen con estilo Material Design y animaciones avanzadas."""
 
-from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QRect, QSize, Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QRect, QSize, Qt, QSequentialAnimationGroup, QParallelAnimationGroup
+from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtWidgets import QFrame, QGraphicsDropShadowEffect, QLabel, QSizePolicy, QVBoxLayout
 import qtawesome as qta
 
 from ..estilos import colores
 
 
+def _oscurecer_color(color_hex: str, factor: float = 0.3) -> str:
+    """Oscurece un color hex multiplicando sus componentes RGB."""
+    color_hex = color_hex.lstrip('#')
+    r = int(color_hex[0:2], 16)
+    g = int(color_hex[2:4], 16)
+    b = int(color_hex[4:6], 16)
+    
+    r = int(r * factor)
+    g = int(g * factor)
+    b = int(b * factor)
+    
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+
 class TarjetaResumen(QFrame):
-    """Tarjeta con titulo, valor y acento de color."""
+    """Tarjeta con titulo, valor y acento de color con animaciones avanzadas."""
 
     def __init__(self, parent, titulo: str, valor: str, color: str, icono_nombre: str | None = None):
         super().__init__(parent)
@@ -19,29 +33,37 @@ class TarjetaResumen(QFrame):
         self.setMinimumHeight(130)
         self.setMaximumHeight(180)
 
+        self.color_acento = color
         self.setProperty("class", "card")
+        
+        # Calcular color de fondo basado en el acento (más colorido)
+        color_fondo = _oscurecer_color(color, 0.28)
+        color_borde = _oscurecer_color(color, 0.35)
+        
         self.setStyleSheet(
             "QFrame {"
-            f"background-color: {colores.SURFACE};"
+            f"background-color: {color_fondo};"
             "border-radius: 12px;"
-            "border: 1px solid #2A2A2A;"
+            f"border: 1px solid {color_borde};"
             "}"
         )
 
-        sombra = QGraphicsDropShadowEffect(self)
-        sombra.setBlurRadius(24)
-        sombra.setOffset(0, 6)
-        sombra.setColor(sombra.color().fromRgb(0, 0, 0, 140))
-        self.setGraphicsEffect(sombra)
+        # Sombra mejorada
+        self.sombra = QGraphicsDropShadowEffect(self)
+        self.sombra.setBlurRadius(20)
+        self.sombra.setOffset(0, 4)
+        self.sombra.setColor(QColor(0, 0, 0, 100))
+        self.setGraphicsEffect(self.sombra)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(10)
 
-        barra = QFrame(self)
-        barra.setFixedHeight(4)
-        barra.setStyleSheet(f"QFrame {{ background-color: {color}; border-radius: 2px; }}")
-        layout.addWidget(barra)
+        # Barra de acento animada
+        self.barra = QFrame(self)
+        self.barra.setFixedHeight(4)
+        self.barra.setStyleSheet(f"QFrame {{ background-color: {color}; border-radius: 2px; }}")
+        layout.addWidget(self.barra)
 
         lbl_titulo = QLabel(titulo)
         lbl_titulo.setFont(QFont("Segoe UI", 13, QFont.Weight.Medium))
@@ -55,24 +77,47 @@ class TarjetaResumen(QFrame):
 
         if icono_nombre:
             icono_lbl = QLabel()
-            pixmap = qta.icon(icono_nombre, color=color).pixmap(QSize(36, 36))
-            icono_lbl.setPixmap(pixmap)
+            self.icono_pixmap = qta.icon(icono_nombre, color=color).pixmap(QSize(36, 36))
+            icono_lbl.setPixmap(self.icono_pixmap)
+            self.icono_label = icono_lbl
             layout.addWidget(icono_lbl, alignment=Qt.AlignmentFlag.AlignRight)
 
         layout.addStretch(1)
 
-        self._animacion = QPropertyAnimation(self, b"geometry", self)
-        self._animacion.setDuration(160)
-        self._animacion.setEasingCurve(QEasingCurve.Type.OutCubic)
+        # Animaciones
+        self._anim_scale = QPropertyAnimation(self, b"geometry", self)
+        self._anim_scale.setDuration(200)
+        self._anim_scale.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        # Animación de sombra
+        self._anim_shadow = QPropertyAnimation(self.sombra, b"blurRadius", self)
+        self._anim_shadow.setDuration(200)
+        self._anim_shadow.setEasingCurve(QEasingCurve.Type.OutCubic)
 
     def enterEvent(self, event):
+        """Efectos al pasar mouse sobre la tarjeta."""
         self._hover_activo = True
-        self._animar_escala(1.02)
+        self._animar_escala(1.04)
+        
+        # Aumentar sombra
+        self._anim_shadow.stop()
+        self._anim_shadow.setStartValue(self.sombra.blurRadius())
+        self._anim_shadow.setEndValue(35)
+        self._anim_shadow.start()
+        
         super().enterEvent(event)
 
     def leaveEvent(self, event):
+        """Volver a estado normal cuando se sale el mouse."""
         self._hover_activo = False
         self._animar_escala(1.0)
+        
+        # Reducir sombra
+        self._anim_shadow.stop()
+        self._anim_shadow.setStartValue(self.sombra.blurRadius())
+        self._anim_shadow.setEndValue(20)
+        self._anim_shadow.start()
+        
         super().leaveEvent(event)
 
     def showEvent(self, event):
@@ -94,10 +139,22 @@ class TarjetaResumen(QFrame):
             )
         else:
             destino = base
-        self._animacion.stop()
-        self._animacion.setStartValue(self.geometry())
-        self._animacion.setEndValue(destino)
-        self._animacion.start()
+        self._anim_scale.stop()
+        self._anim_scale.setStartValue(self.geometry())
+        self._anim_scale.setEndValue(destino)
+        self._anim_scale.start()
 
     def actualizar_valor(self, valor: str):
+        """Actualiza el valor con animación de cambio suave."""
+        # Desvanecer valor anterior
+        self.lbl_valor.setStyleSheet(
+            f"color: {colores.TEXT_PRIMARY}; opacity: 0.5;"
+        )
+        
+        # Cambiar valor
         self.lbl_valor.setText(str(valor))
+        
+        # Re-aparecer
+        self.lbl_valor.setStyleSheet(
+            f"color: {colores.TEXT_PRIMARY};"
+        )
