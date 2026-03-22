@@ -1,6 +1,7 @@
 """Vista de proveedores en PyQt6 con CRUD."""
 
 import sqlite3
+import re
 
 from PyQt6.QtCore import QSize, Qt, QRegularExpression
 from PyQt6.QtGui import QFont, QRegularExpressionValidator
@@ -25,6 +26,28 @@ from modelos.proveedor import Proveedor
 from vistas.componentes.tabla import TablaEstilizada
 from vistas.estilos.colores import *
 from vistas.estilos.qss import get_global_stylesheet
+
+
+def _capitalizar_nombre(nombre: str) -> str:
+    """Capitaliza cada palabra del nombre."""
+    return ' '.join(word.capitalize() for word in nombre.split())
+
+
+def _validar_nombre(nombre: str) -> bool:
+    """Valida que el nombre solo contenga letras y espacios."""
+    return bool(re.match(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$", nombre.strip()))
+
+
+def _validar_correo(correo: str) -> bool:
+    """Valida que el correo sea válido y termine en .com o .ec."""
+    patron = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|ec)$"
+    return bool(re.match(patron, correo.strip()))
+
+
+def _validar_telefono(telefono: str) -> bool:
+    """Valida que el teléfono tenga 7 o 10 dígitos."""
+    solo_digitos = re.sub(r"\D", "", telefono.strip())
+    return len(solo_digitos) in [7, 10]
 
 
 def _crear_titulo(icono_nombre: str, texto: str, color_icono: str = "#FFFFFF") -> QWidget:
@@ -114,12 +137,20 @@ class _ProveedorDialog(QDialog):
         self.input_id = QLineEdit(id_texto)
         self.input_id.setReadOnly(True)
         self.input_id.setStyleSheet("color: #00E676; font-style: italic;")
+        
+        # Nombre: solo letras, capitalizar automáticamente
         self.input_nombre = QLineEdit(data.get("nombre", ""))
+        self.input_nombre.textChanged.connect(self._filtrar_nombre)
+        
+        # Teléfono: solo 7 o 10 dígitos
         self.input_telefono = QLineEdit(data.get("telefono", ""))
+        
+        # Correo con validación .com o .ec
         self.input_correo = QLineEdit(data.get("correo", ""))
+        
         self.input_direccion = QLineEdit(data.get("direccion", ""))
         self.input_nombre.setPlaceholderText("Ej.: Distribuidora Central")
-        self.input_telefono.setPlaceholderText("Ej.: +51 987 654 321")
+        self.input_telefono.setPlaceholderText("Ej.: 0968364154 o +51 999 123456")
         self.input_correo.setPlaceholderText("Ej.: contacto@proveedor.com")
         self.input_direccion.setPlaceholderText("Ej.: Calle Comercio 456")
 
@@ -156,14 +187,41 @@ class _ProveedorDialog(QDialog):
         fila.addWidget(btn_guardar)
         layout.addLayout(fila)
 
+    def _filtrar_nombre(self, texto: str):
+        """Filtra el nombre: solo letras y espacios, capitaliza automáticamente."""
+        texto_filtrado = re.sub(r"[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]", "", texto)
+        if texto_filtrado != texto:
+            self.input_nombre.blockSignals(True)
+            self.input_nombre.setText(texto_filtrado)
+            self.input_nombre.blockSignals(False)
+
     def _validar(self):
-        if not self.input_nombre.text().strip():
-            self.lbl_error.setText("El nombre es obligatorio")
-            return
+        nombre = self.input_nombre.text().strip()
         correo = self.input_correo.text().strip()
-        if correo and "@" not in correo:
-            self.lbl_error.setText("El correo electrónico no es válido")
+        telefono = self.input_telefono.text().strip()
+        
+        # Validar nombre
+        if not nombre:
+            self.lbl_error.setText("❌ El nombre es obligatorio")
             return
+        
+        if not _validar_nombre(nombre):
+            self.lbl_error.setText("❌ El nombre solo puede contener letras y espacios")
+            return
+        
+        # Validar correo (si se proporciona)
+        if correo and not _validar_correo(correo):
+            self.lbl_error.setText("❌ El correo debe ser válido y terminar en .com o .ec")
+            return
+        
+        # Validar teléfono (si se proporciona)
+        if telefono and not _validar_telefono(telefono):
+            self.lbl_error.setText("❌ El teléfono debe tener 7 o 10 dígitos")
+            return
+        
+        # Capitalizar el nombre
+        self.input_nombre.setText(_capitalizar_nombre(nombre))
+        self.lbl_error.setText("")
         self.accept()
 
     def datos(self) -> dict:
