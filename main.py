@@ -599,7 +599,7 @@ class SistemaVentas:
 
         # Volver a mostrar login
         self.ventana_login.show()
-        self.ventana_login.limpiar_campos()
+        #self.ventana_login.limpiar_campos()
 
     def _cerrar_aplicacion(self):
         """Cierra la aplicacion completamente"""
