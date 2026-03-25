@@ -6,20 +6,27 @@ import sqlite3
 import os
 
 
+def get_db_path():
+    """Retorna la ruta de la base de datos en AppData"""
+    app_data = os.path.join(os.environ['LOCALAPPDATA'], 'GestiVentas')
+    os.makedirs(app_data, exist_ok=True)
+    return os.path.join(app_data, 'sistema_ventas.db')
+
+
 class DatabaseConnection:
     """Clase singleton para gestionar la conexión a SQLite"""
 
     _instance = None
     _connection = None
 
-    def __new__(cls, db_path: str = "sistema_ventas.db"):
+    def __new__(cls, db_path: str = None):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._db_path = db_path
+            cls._instance._db_path = db_path if db_path else get_db_path()
         return cls._instance
 
-    def __init__(self, db_path: str = "sistema_ventas.db"):
-        self._db_path = db_path
+    def __init__(self, db_path: str = None):
+        self._db_path = db_path if db_path else get_db_path()
 
     def conectar(self) -> sqlite3.Connection:
         """Establece o retorna la conexión existente"""
@@ -51,9 +58,9 @@ class DatabaseConnection:
             self._connection.rollback()
 
 
-def crear_conexion(db_path: str = "sistema_ventas.db") -> sqlite3.Connection:
+def crear_conexion(db_path: str = None) -> sqlite3.Connection:
     """Función auxiliar para crear una conexión simple"""
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path if db_path else get_db_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
